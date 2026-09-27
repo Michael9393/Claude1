@@ -46,6 +46,17 @@ Then open the URL printed in the terminal (usually http://localhost:5173).
 └── vite.config.ts             # Vite + Vitest config
 ```
 
+## Working with Claude Code
+
+This repo comes with a Claude Code team in `.claude/`:
+
+- **Product team:** `product-strategist`, `requirements-analyst` and `user-advocate` work out what to build. Their output goes to `docs/product/`.
+- **Build team:** `ui-ux-designer`, `frontend-developer`, `test-engineer`, `ponytail` (keeps code lean) and `code-reviewer`.
+- **Commands:** `/spec <idea>`, `/new-component <Name>` and `/check`.
+- **Hook:** Prettier auto-formats every file Claude edits.
+
+See [CLAUDE.md](CLAUDE.md) for the workflow.
+
 ## License
 
 [MIT](LICENSE)
