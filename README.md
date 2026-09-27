@@ -1,1 +1,38 @@
 # Claude1
+
+## Theorie B: oefenapp voor het CBR theorie-examen (auto)
+
+A study app for the Dutch car (B) theory exam, in Dutch. Plain HTML/CSS/JS: no build step, no server, works offline. Progress is saved in the browser (`localStorage`).
+
+### Open it
+
+- Open `index.html` in a browser, or
+- serve the folder (`npx http-server .`), or
+- enable GitHub Pages for the repo to use it on your phone.
+
+### Wat zit erin
+
+| Onderdeel | Wat je doet |
+|---|---|
+| **Flashcards** | Borden, getallen en vragen met herhaling op afstand (Leitner: na 1, 2, 4, 8, 16 dagen). |
+| **Borden** | Bord → betekenis en betekenis → bord, plus een overzicht van alle borden. |
+| **Voorrang** | Kruispunten van bovenaf: tik de verkeersdeelnemers in de juiste volgorde aan. |
+| **Getallen** | Invulvragen over snelheden, promilles, afstanden, massa's, met spiekbriefje. |
+| **Proefexamen** | 12 kennis + 28 inzicht, slagingsgrens 10 en 25, nakijken aan het eind. |
+| **Foutenlogboek** | Elke fout uit elke oefening, per onderwerp, met "oefen mijn fouten". Een fout is opgelost na twee keer achter elkaar goed. |
+
+Gevaarherkenning (hazard perception) zit er nog niet in.
+
+### Content
+
+All questions are written for this app from the Dutch traffic rules (RVV 1990); they are **not** official CBR questions. Signs are simplified SVG drawings. Check doubtful rules against the CBR or your theory book.
+
+- `js/data/signs.js`: road signs
+- `js/data/questions.js`: knowledge, insight and number questions
+- `js/data/voorrang.js`: right-of-way scenarios
+
+Check the data after editing:
+
+```sh
+node tests/validate.js
+```

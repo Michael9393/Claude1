@@ -1,0 +1,72 @@
+// Voorrangssituaties op een kruispunt van bovenaf.
+// arm: waar het voertuig vandaan komt (S = onder, N = boven, E = rechts, W = links).
+// move: 'rechtdoor' | 'links' | 'rechts'. type: 'auto' | 'fiets' | 'tram'.
+// yieldArms: armen met haaientanden (die moeten voorrang verlenen).
+// unpaved: armen met een onverharde weg.
+// order: de juiste volgorde van de voertuigen.
+(function () {
+  var RB = (window.RB = window.RB || {});
+
+  RB.voorrang = [
+    { id: 'v-rechts-1', title: 'Van rechts gaat voor',
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'E', move: 'rechtdoor', type: 'auto' }],
+      order: ['B', 'A'],
+      explain: 'Gelijkwaardig kruispunt: verkeer van rechts gaat voor. B komt voor A van rechts, dus B gaat eerst.' },
+    { id: 'v-rechts-2', title: 'Jij komt van rechts',
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'W', move: 'rechtdoor', type: 'auto' }],
+      order: ['A', 'B'],
+      explain: 'Gelijkwaardig kruispunt: A komt voor B van rechts, dus A gaat eerst.' },
+    { id: 'v-drie', title: 'Drie auto\'s',
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'E', move: 'rechtdoor', type: 'auto' }, { id: 'C', arm: 'N', move: 'rechtdoor', type: 'auto' }],
+      order: ['C', 'B', 'A'],
+      explain: 'C heeft niemand van rechts en gaat eerst. Voor B komt C van rechts, dus daarna B. A moet B voor laten gaan en is als laatste.' },
+    { id: 'v-linksaf-tegenligger', title: 'Linksaf en een tegenligger',
+      vehicles: [{ id: 'A', arm: 'S', move: 'links', type: 'auto' }, { id: 'B', arm: 'N', move: 'rechtdoor', type: 'auto' }],
+      order: ['B', 'A'],
+      explain: 'Afslaand verkeer laat rechtdoorgaand verkeer op dezelfde weg voorgaan. A slaat linksaf en moet tegenligger B eerst laten gaan.' },
+    { id: 'v-linksaf-drie', title: 'Linksaf met verkeer van rechts',
+      vehicles: [{ id: 'A', arm: 'S', move: 'links', type: 'auto' }, { id: 'B', arm: 'E', move: 'rechtdoor', type: 'auto' }, { id: 'C', arm: 'N', move: 'rechtdoor', type: 'auto' }],
+      order: ['C', 'B', 'A'],
+      explain: 'C heeft niemand van rechts en gaat eerst. B moet C (van rechts) voor laten gaan. A moet B (van rechts) en tegenligger C (rechtdoor) voor laten gaan en is als laatste.' },
+    { id: 'v-rechtsaf-van-rechts', title: 'Afslaand verkeer van rechts',
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'E', move: 'rechts', type: 'auto' }],
+      order: ['B', 'A'],
+      explain: 'B komt voor A van rechts. Ook al slaat B af, A moet B voor laten gaan. De regel "rechtdoor gaat voor afslaand" geldt alleen voor verkeer op dezelfde weg.' },
+    { id: 'v-linksaf-van-rechts', title: 'Linksaf van rechts',
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'E', move: 'links', type: 'auto' }],
+      order: ['B', 'A'],
+      explain: 'B komt voor A van rechts en heeft geen tegenligger. Dus B gaat eerst, daarna A.' },
+    { id: 'v-fiets-rechts', title: 'Fietser van rechts',
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'F', arm: 'E', move: 'rechtdoor', type: 'fiets' }],
+      order: ['F', 'A'],
+      explain: 'Een fietser is ook een bestuurder. Op een gelijkwaardig kruispunt gaat de fietser van rechts voor.' },
+    { id: 'v-tram-links', title: 'Tram van links',
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'T', arm: 'W', move: 'rechtdoor', type: 'tram' }],
+      order: ['T', 'A'],
+      explain: 'Op een gelijkwaardig kruispunt heeft de tram voorrang, ook als hij van links komt.' },
+    { id: 'v-tram-drie', title: 'Tram en twee auto\'s',
+      vehicles: [{ id: 'T', arm: 'N', move: 'rechtdoor', type: 'tram' }, { id: 'A', arm: 'E', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'S', move: 'rechtdoor', type: 'auto' }],
+      order: ['T', 'A', 'B'],
+      explain: 'De tram gaat op een gelijkwaardig kruispunt als eerste. Daarna A, want A komt voor B van rechts.' },
+    { id: 'v-onverhard', title: 'Onverharde weg',
+      unpaved: ['E'],
+      vehicles: [{ id: 'A', arm: 'E', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'S', move: 'rechtdoor', type: 'auto' }],
+      order: ['B', 'A'],
+      explain: 'A komt voor B van rechts, maar A rijdt op een onverharde weg. Verkeer op een onverharde weg moet verkeer op een verharde weg voor laten gaan.' },
+    { id: 'v-haaientanden-jij', title: 'Haaientanden voor jou',
+      yieldArms: ['S', 'N'],
+      vehicles: [{ id: 'A', arm: 'S', move: 'rechtdoor', type: 'auto' }, { id: 'B', arm: 'W', move: 'rechtdoor', type: 'auto' }],
+      order: ['B', 'A'],
+      explain: 'A heeft haaientanden en moet voorrang verlenen, ook al komt A voor B van rechts. Borden en markering gaan voor de regel "van rechts gaat voor".' },
+    { id: 'v-haaientanden-fiets', title: 'Fietser op de voorrangsweg',
+      yieldArms: ['S', 'N'],
+      vehicles: [{ id: 'A', arm: 'N', move: 'rechtdoor', type: 'auto' }, { id: 'F', arm: 'E', move: 'rechtdoor', type: 'fiets' }],
+      order: ['F', 'A'],
+      explain: 'Zonder haaientanden zou A voorgaan (A komt voor F van rechts). Maar A heeft haaientanden en moet de fietser op de voorrangsweg voor laten gaan.' },
+    { id: 'v-voorrangsweg-drie', title: 'Voorrangsweg met linksafslaander',
+      yieldArms: ['E', 'W'],
+      vehicles: [{ id: 'A', arm: 'S', move: 'links', type: 'auto' }, { id: 'B', arm: 'N', move: 'rechtdoor', type: 'auto' }, { id: 'C', arm: 'E', move: 'rechtdoor', type: 'auto' }],
+      order: ['B', 'A', 'C'],
+      explain: 'A en B rijden op de voorrangsweg; C heeft haaientanden en is als laatste. Op de voorrangsweg laat A (linksaf) tegenligger B (rechtdoor) eerst gaan.' }
+  ];
+})();
