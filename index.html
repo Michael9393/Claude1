@@ -3,14 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Theorie Oefenen B</title>
-  <meta name="description" content="Oefenapp voor het CBR theorie-examen auto (rijbewijs B): flashcards, verkeersborden, voorrang, getallen, proefexamen en foutenlogboek.">
+  <meta name="description" content="Gratis oefenapp voor het CBR theorie-examen auto (rijbewijs B): flashcards, verkeersborden, voorrang, getallen, proefexamen van 50 vragen en foutenlogboek. Zonder account, werkt offline.">
+  <meta name="theme-color" content="#c2410c">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header>
     <a class="logo" href="#/start">Theorie <span>B</span></a>
-    <nav>
+    <nav aria-label="Hoofdmenu">
       <a href="#/start">Start</a>
       <a href="#/kaarten">Flashcards</a>
       <a href="#/borden">Borden</a>
@@ -22,6 +27,7 @@
   </header>
   <main id="app"></main>
 
+  <script src="js/util.js"></script>
   <script src="js/data/signs.js"></script>
   <script src="js/data/questions.js"></script>
   <script src="js/data/voorrang.js"></script>

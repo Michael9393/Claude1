@@ -172,8 +172,8 @@
       q: 'Op ongeveer hoeveel meter van je auto zet je de gevarendriehoek neer?',
       answer: 30, explain: 'De regel zegt: goed zichtbaar op ongeveer 30 meter, aan de kant van het verkeer waarvoor je auto gevaar oplevert.' },
     { id: 'n-seconden', part: 'kennis', topic: 'afstand', type: 'num', unit: 'seconden', source: S.veilig,
-      q: 'Hoeveel seconden afstand moet je bij goed weer minimaal houden tot je voorganger?',
-      answer: 2, explain: 'Houd minstens 2 seconden afstand. Bij regen, gladheid of slecht zicht meer.' },
+      q: 'Hoeveel seconden afstand tot je voorganger is bij goed weer het advies (minimaal)?',
+      answer: 2, explain: 'Het advies is minstens 2 seconden afstand. Dat getal staat niet in de wet, maar zo heb je tijd om te reageren en te remmen. Bij regen, gladheid of slecht zicht neem je meer afstand.' },
     { id: 'n-reactietijd', part: 'kennis', topic: 'afstand', type: 'num', unit: 'seconde', source: S.remweg,
       q: 'Hoe lang is de gemiddelde reactietijd van een uitgeruste, nuchtere bestuurder ongeveer?',
       answer: 1, explain: 'Gemiddeld ongeveer 1 seconde. Ben je moe, afgeleid of onder invloed, dan duurt het langer.' },
@@ -353,7 +353,7 @@
       explain: 'Het mistachterlicht mag alleen bij mist of sneeuwval met zicht onder 50 meter. Bij regen verblindt het felle rode licht het verkeer achter je.' },
     { id: 'k-alarm', part: 'kennis', topic: 'verlichting', type: 'mc', source: S.rvvLicht,
       q: 'Wanneer gebruik je je alarmlichten (waarschuwingsknipperlichten)?',
-      options: ['Als je door pech stilstaat of heel langzaam rijdt en anderen moet waarschuwen', 'Als je even fout parkeert', 'Als je wilt bedanken', 'Als je in een tunnel rijdt'], answer: 0,
+      options: ['Als je door pech of een ongeval stilstaat en anderen moet waarschuwen', 'Als je even fout parkeert', 'Als je wilt bedanken', 'Als je in een tunnel rijdt'], answer: 0,
       explain: 'Alarmlichten zijn om anderen te waarschuwen voor gevaar, zoals een auto met pech. Niet om "even" fout te staan.' },
 
     // --- autosnelweg
@@ -653,7 +653,7 @@
     { id: 'i-licht-bord', part: 'inzicht', topic: 'verkeerslichten', type: 'mc', source: S.rvv63,
       q: 'Het verkeerslicht staat op groen, maar er staat ook een bord "voorrang verlenen". Wat geldt?',
       options: ['Het verkeerslicht', 'Het bord'], answer: 0,
-      explain: 'Werkende verkeerslichten gaan boven verkeersborden. Het bord is bedoeld voor als de lichten uit staan of geel knipperen.' },
+      explain: 'Werkende verkeerslichten gaan boven borden die de voorrang regelen, zoals "voorrang verlenen". Dat bord geldt als de lichten uit staan of geel knipperen. Andere borden, zoals een inrijverbod, blijven gewoon gelden.' },
     { id: 'i-knipper-haai', part: 'inzicht', topic: 'verkeerslichten', type: 'mc', source: S.rvv63,
       q: 'De verkeerslichten knipperen geel. Voor jou staan haaientanden en een bord "voorrang verlenen". Van links komt een auto. Wat doe je?',
       options: ['Voorrang verlenen', 'Doorrijden, want de auto komt van links'], answer: 0,

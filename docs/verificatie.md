@@ -173,8 +173,27 @@ Nagezocht zijn onder andere:
 2. **Ronde 2:** alle uitlegteksten, plus opnieuw alles wat in ronde 1 veranderde. Dit leverde 1 correctie op.
 3. **Ronde 3:** alleen de wijzigingen uit ronde 2 en de nieuwe items. Geen bevindingen, dus de controle is afgerond.
 
+## Examenvorm (28 september 2026)
+
+Bij de productreview bleek dat het proefexamen nog de oude vorm had (12 kennis met 10 goed, 28 inzicht met 25 goed, gevaarherkenning apart). Sinds **7 april 2025** is het CBR theorie-examen B één geheel:
+
+- 50 vragen door elkaar, in 30 minuten
+- 44 goed om te slagen
+- gevaarherkenning zit er als korte filmpjes tussen
+- vraagvormen: ja/nee, meerkeuze, invullen, aanklikken in een foto en slepen
+
+cbr.nl was vanuit de ontwikkelomgeving niet te openen. De vorm komt uit het [CBR-nieuwsbericht](https://www.cbr.nl/nl/over-het-cbr/over/laatste-nieuws/nieuws/vernieuwd-theorie-examen-b-rijbewijs-vanaf-7-april) zoals geciteerd door meerdere oefensites (Theorio, nutheorie.nl, turbotheorie.nl), die met elkaar overeenkomen. **Controleer dit op cbr.nl.** Het proefexamen in de app volgt nu deze vorm (`EXAM` in `js/app.js`), zonder filmpjes en foto's.
+
+Bij dezelfde review zijn drie vragen aangescherpt:
+
+| Vraag | Probleem | Aanpassing |
+|---|---|---|
+| `k-alarm` | "heel langzaam rijdt" staat niet in het genoemde artikel | Antwoord gaat nu alleen over stilstaan door pech of een ongeval |
+| `i-licht-bord` | Uitleg deed alsof lichten boven elk bord gaan | Lichten gaan boven borden **die de voorrang regelen** (art. 64); andere borden blijven gelden |
+| `n-seconden` | "moet" voor iets dat een advies is | Vraag en uitleg spreken nu van een advies |
+
 ## Bekende beperkingen
 
 - Regels veranderen. Denk aan de maximumsnelheid op de snelweg: sinds 2025 mag je op een paar trajecten overdag weer 130 km/h. Controleer dit voor je examen.
 - De borden zijn vereenvoudigde tekeningen.
-- Gevaarherkenning zit niet in de app.
+- Gevaarherkenning en vragen met foto's (aanklikken, slepen) zitten niet in de app.

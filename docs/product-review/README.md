@@ -50,6 +50,32 @@ The app is strong on the basics: the questions are sourced from the law, the voo
 - `i-licht-bord`: the explanation overgeneralises art. 64, as if a green light overrides any sign.
 - `n-seconden`: says "moet" for what is only advice.
 
+## Status
+
+All seven "Now" items below are done (28 September 2026), plus the three content corrections, the low-severity bugs and most medium UX issues:
+
+- **Exam:** 50 mixed questions, a 30-minute timer and 44 to pass. Unanswered questions count as wrong. Voorrang is limited to 6 per exam, and results in the old format still show in the history.
+- **Bugs:** "Stoppen" works; number input handles 3.500 and 3 500 and says when input is invalid; flashcard due dates count in calendar days.
+- **Mobile menu:** it wraps onto two rows. The Flashcards table is now a list.
+- **Dark mode and contrast:** darker accent colour and readable green/red buttons.
+- **Accessibility:**
+  - Signs have labels; in a quiz the label is neutral, so it doesn't give the answer away.
+  - Vehicles are described (type, where from, where to).
+  - Feedback is announced to screen readers.
+  - `aria-current` in the menu and a page title per route.
+- **Mistakes:** a flashcard "wist ik niet" no longer counts as a mistake. A mistake is resolved after correct answers on two different days.
+- **Voorrang:**
+  - Scenario titles are hidden until solved.
+  - The correct order is drawn on the crossing after answering, and in the exam review.
+  - "Opnieuw kiezen" is disabled after answering.
+- **Exam guard:** the app asks before leaving a running exam, whether through the menu, Back or closing the tab.
+- **"Vandaag":** a button on the start page, a short value proposition, and the legal source shown under each explanation.
+- **Saved data:** version field, type checks and escaping. A Content-Security-Policy is added, and progress from another tab is picked up.
+- **Installable and offline:** manifest, icons and a network-first service worker.
+- **Tests:** behaviour tests in `tests/logic.js`. `tests/validate.js` now requires a pool at least twice the size of one exam.
+
+Not yet done: everything under Next and Later.
+
 ## Recommended roadmap
 
 **Now (each small, S):**
