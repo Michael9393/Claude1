@@ -31,7 +31,7 @@ All questions are written for this app from the Dutch traffic rules (RVV 1990); 
 - `js/data/signs.js`: 28 road signs
 - `js/data/voorrang.js`: 15 right-of-way scenarios
 
-Every question was checked against its source and corrected where needed; see [docs/verificatie.md](docs/verificatie.md) for the method, the fixes and the known limitations.
+Every question was checked against the consolidated law texts (RVV 1990, Wegenverkeerswet 1994, Reglement rijbewijzen and others) and corrected where needed; see [docs/verificatie.md](docs/verificatie.md) for the method, the fixes and the known limitations.
 
 After editing, repeat the check:
 

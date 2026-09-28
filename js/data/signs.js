@@ -154,13 +154,13 @@
     },
     {
       id: 'autoweg', group: 'blauw', name: 'Autoweg',
-      meaning: 'Begin van de autoweg: een weg alleen voor snelle motorvoertuigen. Maximumsnelheid 100 km/h.',
+      meaning: 'Begin van de autoweg: alleen voor motorvoertuigen die minstens 50 km/h kunnen en mogen rijden. Maximumsnelheid 100 km/h.',
       svg: blueSquare('<g fill="#fff"><path d="M18,62 l6,-14 h30 l10,10 h16 l4,4 v8 h-66 z"/><circle cx="30" cy="72" r="7"/><circle cx="72" cy="72" r="7"/></g>' +
         '<g fill="' + BLUE + '"><circle cx="30" cy="72" r="3"/><circle cx="72" cy="72" r="3"/></g>')
     },
     {
       id: 'erf', group: 'blauw', name: 'Erf',
-      meaning: 'Begin van een erf (woonerf). Rijd stapvoets; voetgangers mogen de hele weg gebruiken en kinderen mogen er spelen.',
+      meaning: 'Begin van een erf (woonerf). Maximaal 15 km/h; voetgangers mogen de hele breedte van de weg gebruiken en je parkeert alleen op aangegeven plaatsen.',
       svg: blueSquare('<g fill="#fff"><path d="M16,50 l18,-16 l18,16 v24 h-36 z"/><circle cx="68" cy="40" r="5"/><rect x="64" y="47" width="8" height="18" rx="2"/><rect x="64" y="64" width="3" height="12"/><rect x="69" y="64" width="3" height="12"/>' +
         '<circle cx="84" cy="62" r="3.5"/><rect x="81" y="67" width="6" height="10" rx="2"/></g><rect x="28" y="60" width="10" height="14" fill="' + BLUE + '"/>')
     },
