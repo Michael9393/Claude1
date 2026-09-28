@@ -27,12 +27,15 @@ Gevaarherkenning (hazard perception) zit er nog niet in.
 
 All questions are written for this app from the Dutch traffic rules (RVV 1990); they are **not** official CBR questions. Signs are simplified SVG drawings. Check doubtful rules against the CBR or your theory book.
 
-- `js/data/signs.js`: road signs
-- `js/data/questions.js`: knowledge, insight and number questions
-- `js/data/voorrang.js`: right-of-way scenarios
+- `js/data/questions.js`: 200 knowledge, insight and number questions, each with a `source`
+- `js/data/signs.js`: 28 road signs
+- `js/data/voorrang.js`: 15 right-of-way scenarios
 
-Check the data after editing:
+Every question was checked against its source and corrected where needed; see [docs/verificatie.md](docs/verificatie.md) for the method, the fixes and the known limitations.
+
+After editing, repeat the check:
 
 ```sh
-node tests/validate.js
+node tests/validate.js           # automatic checks (sources, duplicates, count, answers)
+node tests/review.js > review.txt   # readable list for a manual review round
 ```

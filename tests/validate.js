@@ -12,6 +12,7 @@ const RB = ctx.window.RB;
 const errors = [];
 const fail = (msg) => errors.push(msg);
 const ids = new Set();
+const texts = new Map();
 const unique = (id) => { if (ids.has(id)) fail('Dubbel id: ' + id); ids.add(id); };
 
 for (const s of RB.signs) {
@@ -25,6 +26,10 @@ for (const q of RB.questions) {
   if (!RB.topics[q.topic]) fail('Onbekend onderwerp: ' + q.id);
   if (!['kennis', 'inzicht'].includes(q.part)) fail('Onbekend onderdeel: ' + q.id);
   if (!q.q || !q.explain) fail('Vraag of uitleg ontbreekt: ' + q.id);
+  if (!q.source) fail('Bron ontbreekt: ' + q.id);
+  const key = q.q.trim().toLowerCase();
+  if (texts.has(key)) fail('Dubbele vraagtekst: ' + q.id + ' en ' + texts.get(key));
+  texts.set(key, q.id);
   if (q.type === 'mc') {
     if (!Array.isArray(q.options) || q.options.length < 2) fail('Te weinig opties: ' + q.id);
     if (!(q.answer >= 0 && q.answer < q.options.length)) fail('Antwoord buiten bereik: ' + q.id);
@@ -57,6 +62,7 @@ const inzichtMc = RB.questions.filter((q) => q.part === 'inzicht').length;
 if (kennis < 12) fail('Te weinig kennisvragen: ' + kennis);
 if (RB.voorrang.length < 10) fail('Te weinig voorrangssituaties: ' + RB.voorrang.length);
 if (inzichtMc < 18) fail('Te weinig inzichtvragen: ' + inzichtMc);
+if (RB.questions.length < 200) fail('Minder dan 200 vragen: ' + RB.questions.length);
 
 if (errors.length) {
   console.error(errors.join('\n'));

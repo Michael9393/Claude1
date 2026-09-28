@@ -137,7 +137,7 @@
     },
     {
       id: 'inhaalverbod', group: 'rond-rood', name: 'Inhaalverbod',
-      meaning: 'Je mag met een motorvoertuig geen andere motorvoertuigen inhalen.',
+      meaning: 'Motorvoertuigen mogen elkaar niet inhalen. Fietsers en bromfietsers mag je wel inhalen.',
       svg: redRing(frontCar(34, RED) + frontCar(66, '#111'))
     },
     {
