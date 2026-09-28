@@ -74,7 +74,7 @@ All seven "Now" items below are done (28 September 2026), plus the three content
 - **Installable and offline:** manifest, icons and a network-first service worker.
 - **Tests:** behaviour tests in `tests/logic.js`. `tests/validate.js` now requires a pool at least twice the size of one exam.
 
-Not yet done: everything under Next and Later.
+Not yet done: everything under Next and Later. See [round 2](round-2/README.md) for a second, independent review of the fixed app.
 
 ## Recommended roadmap
 
