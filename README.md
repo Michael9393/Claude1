@@ -41,5 +41,6 @@ After editing, repeat the check:
 ```sh
 node tests/validate.js           # automatic checks (sources, duplicates, count, answers)
 node tests/logic.js              # behaviour tests: number input, flashcard schedule, mistake log, saved data
+NODE_PATH=$(npm root -g) node tests/smoke.js   # browser smoke test (needs Playwright)
 node tests/review.js > review.txt   # readable list for a manual review round
 ```
