@@ -1,6 +1,6 @@
 # Spec: Exam-ready loop
 
-- **Status:** approved (30 September 2026). Part 1 in progress.
+- **Status:** approved (30 September 2026). Part 1 done (30 September 2026); Parts 2 and 3 to build.
 - **Priority:** Must
 - **Related:** backlog #3, #4, #5, #6 (combined here); #9 rides along (AC-6); overlaps #18 (store hardening, only for the fields this spec reads). Vision: [success measures](../vision.md#success-measures). Backlog #1–#2 (exam format, content fixes) are `done`, so "trust the content first" is satisfied.
 
@@ -107,6 +107,7 @@ Start page: date choice, target line with minutes, readiness block with action b
   examMonth: '2026-11' | null,            // new (Part 1)
   history: { voorrang: [{ id: 'v-3', ok: true, day: '2026-09-30' }] },  // new (Part 1), max 20 per topic
   seen: { 'v-3': '2026-09-30' },          // new (Part 1): last day each item was answered or self-graded
+  answeredDay: { day: '2026-09-30', ids: { 'v-3': true } } | null,  // new (Part 1, from code review): enforces AC-2 beyond the 20-entry cap
   exams: [{ date: 1790000000000, score: 43, total: 50, passed: false, timeUp: false,
             topics: { voorrang: [4, 6] } }],        // topics new (Part 1), optional
   mistakes: { 'k-alarm': { last: 1790000000000, streak: 1, okDay: '2026-09-29', … } },  // existing; `last` used for ordering

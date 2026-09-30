@@ -12,7 +12,7 @@
   function empty() {
     return {
       version: VERSION, srs: {}, mistakes: {}, exams: [], stats: { answered: 0, correct: 0 }, examDate: null, done: {},
-      examMonth: null, history: {}, seen: {}
+      examMonth: null, history: {}, seen: {}, answeredDay: null
     };
   }
 
@@ -24,7 +24,7 @@
   function safeKey(k) { return k !== '__proto__' && k !== 'constructor' && k !== 'prototype'; }
   function eachValid(src, ok) {
     var out = {};
-    if (isObj(src)) Object.keys(src).forEach(function (k) { if (ok(src[k])) out[k] = src[k]; });
+    if (isObj(src)) Object.keys(src).forEach(function (k) { if (safeKey(k) && ok(src[k])) out[k] = src[k]; });
     return out;
   }
 
@@ -54,6 +54,11 @@
         if (safeKey(id) && U.isDay(raw.seen[id])) s.seen[id] = raw.seen[id];
       });
     }
+    // Welke vragen vandaag al in de geschiedenis staan; geen geldige dag of lijst: null.
+    var ad = raw.answeredDay;
+    if (isObj(ad) && U.isDay(ad.day) && isObj(ad.ids)) {
+      s.answeredDay = { day: ad.day, ids: eachValid(ad.ids, function (v) { return typeof v === 'boolean'; }) };
+    }
     return s;
   }
 
@@ -67,8 +72,9 @@
       out.score = e.score;
       out.total = e.total;
     } else {
-      out.kennis = num(e.kennis);
-      out.inzicht = num(e.inzicht);
+      if (!isNum(e.kennis) || !isNum(e.inzicht)) return null;
+      out.kennis = e.kennis;
+      out.inzicht = e.inzicht;
     }
     // Score per onderwerp is optioneel: klopt er iets niet, dan vervalt alleen dit deel.
     if (isObj(e.topics)) {
@@ -85,13 +91,19 @@
   }
 
   // Eerste antwoord per vraag per dag komt in de geschiedenis van het onderwerp (max. HISTORY).
+  // Of een vraag vandaag al telde, staat los van die ingekorte lijst in answeredDay.
   function addHistory(item, ok) {
     var t = String(item.topic);
-    if (!safeKey(t)) return;
+    var id = String(item.id);
+    if (!safeKey(t) || !safeKey(id)) return;
     var day = U.dayKey();
+    if (!state.answeredDay || state.answeredDay.day !== day) state.answeredDay = { day: day, ids: {} };
+    var ids = state.answeredDay.ids;
     var list = Object.prototype.hasOwnProperty.call(state.history, t) ? state.history[t] : (state.history[t] = []);
-    if (list.some(function (h) { return h.id === item.id && h.day === day; })) return;
-    list.push({ id: item.id, ok: !!ok, day: day });
+    // De lijst-check vangt ook antwoorden van vandaag van voor answeredDay bestond.
+    if (Object.prototype.hasOwnProperty.call(ids, id) || list.some(function (h) { return h.id === id && h.day === day; })) return;
+    ids[id] = true;
+    list.push({ id: id, ok: !!ok, day: day });
     if (list.length > HISTORY) list.splice(0, list.length - HISTORY);
   }
   function markSeen(id) {

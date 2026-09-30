@@ -374,6 +374,9 @@
     var hint = box.querySelector('.datum-hint');
     var precise = false; // "Precieze datum" gekozen, maar nog geen datum opgeslagen
     var typedPast = false; // de getypte datum ligt voor vandaag (niet opgeslagen)
+    // Laatst opgeslagen datum en maand in deze weergave: wisselen tussen de soorten mag ze niet kwijtraken.
+    var lastDate = store.state().examDate;
+    var lastMonth = store.state().examMonth;
 
     function kind() {
       var st = store.state();
@@ -401,6 +404,7 @@
         var monthSel = slot.querySelector('select');
         monthSel.onchange = function () {
           store.setExamMonth(monthSel.value);
+          lastMonth = store.state().examMonth;
           var old = monthSel.querySelector('[data-voorbij]');
           if (old && !old.selected) old.remove();
           update();
@@ -411,8 +415,8 @@
         input.onchange = function () {
           var v = input.value;
           typedPast = false;
-          if (!v) { precise = true; store.setExamDate(null); }
-          else if (U.isDay(v) && U.daysUntil(v, Date.now()) >= 0) store.setExamDate(v);
+          if (!v) { precise = true; lastDate = null; store.setExamDate(null); }
+          else if (U.isDay(v) && U.daysUntil(v, Date.now()) >= 0) { store.setExamDate(v); lastDate = v; }
           // Een dag in het verleden slaan we niet op. Tussenstanden tijdens het typen van het jaar
           // (Chrome meldt 0002, 0020, 0202, of 20271 bij een vijfde cijfer) negeren we, anders knippert de melding.
           else if (U.isDay(v) && Number(v.slice(0, 4)) >= 1000) typedPast = true;
@@ -470,11 +474,21 @@
       var v = kindSel.value;
       typedPast = false;
       precise = v === 'datum';
+      if (st.examDate) lastDate = st.examDate;
+      if (st.examMonth) lastMonth = st.examMonth;
       if (v === 'geen') store.setExamMonth(null);
       else if (v === 'maand') {
-        // Voorkeuze: de maand van een opgeslagen datum als die in de lijst staat, anders volgende maand.
-        var from = st.examDate && st.examDate.slice(0, 7);
-        store.setExamMonth(from && U.monthList(Date.now(), 12).indexOf(from) >= 0 ? from : U.monthKey(Date.now(), 1));
+        // Voorkeuze: de opgeslagen maand, anders de maand van de opgeslagen datum,
+        // anders de laatst gekozen maand in deze weergave, anders volgende maand.
+        var months = U.monthList(Date.now(), 12);
+        var pick = [st.examMonth, st.examDate && st.examDate.slice(0, 7), lastMonth].filter(function (m) {
+          return m && months.indexOf(m) >= 0;
+        })[0];
+        store.setExamMonth(pick || U.monthKey(Date.now(), 1));
+        lastMonth = store.state().examMonth;
+      } else if (!st.examDate && U.isDay(lastDate)) {
+        // Terug naar "Precieze datum": de eerder opgeslagen dag komt terug in het veld en in de opslag.
+        store.setExamDate(lastDate);
       }
       update(); // de focus blijft op deze keuzelijst
     };

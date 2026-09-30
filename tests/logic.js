@@ -284,6 +284,56 @@ test('clean: proefexamens en onderwerpscores', () => {
   for (const k of [1, 2, 3]) assert.ok(!('topics' in st.exams[k]), 'slechte topics vervallen, examen blijft');
   assert.strictEqual(st.exams[4].kennis, 11, 'oud formaat blijft');
 });
+test('AC-2: eerste antwoord per dag telt ook na 20 nieuwere antwoorden in hetzelfde onderwerp', () => {
+  const { RB, clock, data } = load();
+  for (let i = 1; i <= 21; i++) RB.store.recordAnswer({ id: 'q' + i, topic: 'borden' }, true);
+  RB.store.recordAnswer({ id: 'q1', topic: 'borden' }, false);
+  let h = RB.store.state().history.borden;
+  assert.strictEqual(h.length, 20);
+  assert.ok(!h.some((x) => x.id === 'q1'), 'q1 niet opnieuw vandaag');
+  // Ook na opnieuw laden (answeredDay staat in de opslag).
+  const again = load(data['rijbewijs-b-v1'], clock.now).RB.store;
+  again.recordAnswer({ id: 'q1', topic: 'borden' }, false);
+  assert.ok(!again.state().history.borden.some((x) => x.id === 'q1'), 'ook niet na herladen');
+  clock.now += 24 * HOUR;
+  RB.store.recordAnswer({ id: 'q1', topic: 'borden' }, false);
+  h = RB.store.state().history.borden;
+  same(h[19], { id: 'q1', ok: false, day: '2026-09-29' });
+  same(Object.keys(RB.store.state().answeredDay.ids), ['q1']);
+});
+test('AC-2: flashcard-zelfbeoordeling blokkeert het eerste echte antwoord niet', () => {
+  const { RB } = load();
+  RB.store.recordStat(true, 'k-alarm');
+  RB.store.recordAnswer({ id: 'k-alarm', topic: 'kennis' }, false);
+  assert.strictEqual(RB.store.state().history.kennis.length, 1);
+});
+test('clean: answeredDay', () => {
+  const ok = load('{"answeredDay":{"day":"2026-09-28","ids":{"a":true,"b":"ja","__proto__":true,"constructor":true,"c":false}}}').RB.store.state().answeredDay;
+  assert.strictEqual(ok.day, '2026-09-28');
+  same(Object.keys(ok.ids), ['a', 'c']);
+  assert.strictEqual(Object.getPrototypeOf(Object.getPrototypeOf(ok.ids)), null, 'prototype niet vervangen');
+  for (const bad of [{ day: '2026-02-31', ids: {} }, { day: '2026-09-28', ids: [] }, { day: '2026-09-28' }, 'x', null]) {
+    assert.strictEqual(load({ answeredDay: bad }).RB.store.state().answeredDay, null, JSON.stringify(bad));
+  }
+});
+test('clean: oud examenformaat vereist getallen voor kennis en inzicht', () => {
+  const exams = [{ date: 5 }, { date: 6, score: null, total: null }, { date: 7, kennis: 11 }, { date: 8, kennis: 'x', inzicht: 3 }, { date: 9, kennis: 11, inzicht: 26 }];
+  const st = load({ exams }).RB.store.state();
+  same(st.exams.map((e) => e.date), [9]);
+});
+test('clean: __proto__, constructor en prototype worden overgeslagen in srs, mistakes en done', () => {
+  const raw = '{"mistakes":{"__proto__":{"count":1},"constructor":{"count":1},"a":{"count":1}},' +
+    '"srs":{"__proto__":{"box":1,"due":1},"prototype":{"box":1,"due":1}},"done":{"__proto__":true,"constructor":false}}';
+  const st = load(raw).RB.store.state();
+  const objProto = Object.getPrototypeOf(st.history); // Object.prototype van de vm-realm
+  assert.strictEqual(Object.getPrototypeOf(st.mistakes), objProto);
+  assert.strictEqual(Object.getPrototypeOf(st.srs), objProto);
+  assert.strictEqual(Object.getPrototypeOf(st.done), objProto);
+  assert.strictEqual(Object.getPrototypeOf(objProto), null);
+  same(Object.keys(st.mistakes), ['a']);
+  same(Object.keys(st.srs), []);
+  same(Object.keys(st.done), []);
+});
 test('clean: mistakes[id].last moet een eindig getal zijn', () => {
   const st = load({ mistakes: { a: { count: 1, last: 'gisteren' }, b: { count: 1, last: 7 }, c: { count: 1 } } }).RB.store.state();
   assert.ok(!('last' in st.mistakes.a));

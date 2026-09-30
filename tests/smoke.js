@@ -211,6 +211,29 @@ async function run(base) {
   check('date: ended month says so (AC-8)', (await status()) === 'November is voorbij. Kies een nieuwe maand of een precieze datum.', await status());
   check('date: ended month stays visible in the list', /\(voorbij\)/.test(await dp.textContent('.datum-veld select option')));
   check('date: no horizontal scroll at 320px', (await dp.evaluate(() => document.documentElement.scrollWidth)) <= 320);
+  // Switching kinds keeps the saved date and month.
+  await dp.clock.setFixedTime(new Date(2026, 8, 30, 12));
+  await dp.evaluate(() => localStorage.setItem('rijbewijs-b-v1', JSON.stringify({ version: 3, examDate: '2026-11-20' })));
+  await dp.reload();
+  await dp.selectOption('#examen-soort', 'maand');
+  check('date switch: Maand preselects the month of the saved date', (await dp.inputValue('.datum-veld select')) === '2026-11');
+  await dp.selectOption('#examen-soort', 'datum');
+  check('date switch: back to Precieze datum shows the saved date', (await dp.inputValue('.datum-veld input')) === '2026-11-20');
+  check('date switch: the saved date is kept', (await stored()).d === '2026-11-20', JSON.stringify(await stored()));
+  check('date switch: countdown is back', (await status()) === 'Nog 51 dagen tot je examen.', await status());
+  await dp.evaluate(() => localStorage.setItem('rijbewijs-b-v1', JSON.stringify({ version: 3, examMonth: '2026-12' })));
+  await dp.reload();
+  check('date switch: saved month december is selected', (await dp.inputValue('.datum-veld select')) === '2026-12');
+  await dp.selectOption('#examen-soort', 'datum');
+  await dp.fill('.datum-veld input', '2026-10-15');
+  await dp.selectOption('#examen-soort', 'maand');
+  check('date switch: Maand prefers the saved date month', (await dp.inputValue('.datum-veld select')) === '2026-10');
+  await dp.evaluate(() => localStorage.setItem('rijbewijs-b-v1', JSON.stringify({ version: 3, examMonth: '2026-12' })));
+  await dp.reload();
+  await dp.selectOption('#examen-soort', 'datum');
+  await dp.selectOption('#examen-soort', 'maand');
+  check('date switch: month december → Precieze datum → Maand shows december', (await dp.inputValue('.datum-veld select')) === '2026-12');
+  check('date switch: december still saved', (await stored()).m === '2026-12', JSON.stringify(await stored()));
   await dp.evaluate(() => localStorage.setItem('rijbewijs-b-v1', '{"version":2,"examDate":"2026-02-31","examMonth":"2026-13","history":{"__proto__":[{"id":"x","ok":true,"day":"2026-12-01"}]},"seen":"x","exams":[{"date":1,"score":60,"total":50},{"date":2,"score":40,"total":50,"topics":{"a":[9,1]}}]}'));
   for (const r of ['start', 'examen']) {
     await dp.goto(base + '#/' + r); await dp.reload(); await dp.waitForTimeout(100);
