@@ -142,7 +142,7 @@
     },
     {
       id: 'autosnelweg', group: 'blauw', name: 'Autosnelweg',
-      meaning: 'Begin van de autosnelweg. Alleen voor motorvoertuigen die harder dan 60 km/h kunnen en mogen rijden.',
+      meaning: 'Begin van de autosnelweg. Alleen voor motorvoertuigen die minstens 60 km/h kunnen en mogen rijden.',
       svg: blueSquare('<rect x="18" y="26" width="64" height="8" fill="#fff"/><rect x="22" y="34" width="6" height="12" fill="#fff"/><rect x="72" y="34" width="6" height="12" fill="#fff"/>' +
         '<path d="M34,86 L46,44 M66,86 L54,44" stroke="#fff" stroke-width="6" fill="none"/><path d="M50,84 v-8 M50,68 v-8 M50,53 v-6" stroke="#fff" stroke-width="3"/>')
     },

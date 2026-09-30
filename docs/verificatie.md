@@ -14,6 +14,24 @@ Elke vraag in `js/data/questions.js` heeft een `source`-veld dat zegt op welke r
 
 Vragen met bron *CBR-leerstof: veilig rijgedrag* gaan over verstandig rijgedrag (afstand, vermoeidheid, aquaplaning). Daar staat geen wetsartikel achter.
 
+## Controle na productreview (30 september 2026)
+
+Een reviewer plaatste zes kanttekeningen bij de inhoud. Elk punt is nagezocht in de wettekst. wetten.overheid.nl, cbr.nl en officielebekendmakingen.nl waren vanuit de ontwikkelomgeving opnieuw geblokkeerd. Gebruikt zijn:
+
+- RVV 1990, toestand 1 juli 2026, uit de CC0-kopie [Apolloccrypt/wetgeving-nl](https://github.com/Apolloccrypt/wetgeving-nl) (artikelen).
+- **Bijlage I (borden)** uit [statengeneraal/laws-markdown](https://github.com/statengeneraal/laws-markdown) (`AMvB/reglement/verkeersregels/en/verkeerstekens/1990/(rvv/1990)/BWBR0004825/README.md`). Dat is een oudere geconsolideerde BWB-tekst. De omschrijving van F1 is dezelfde als in de *Uitvoeringsvoorschriften BABW inzake verkeerstekens* (BWBR0009104, toestand 1 oktober 2023, in de CC0-kopie) en in de bordenlijst van het NDW.
+
+| Vraag of bord | Wat de reviewer zei | Wat de wet zegt | Aanpassing |
+|---|---|---|---|
+| `k-blinden`, `i-blinde` | Een witte stok met rode ringen betekent doofblind; een blinde heeft een gewone witte stok | Art. 49 lid 1: "Bestuurders moeten **blinden, voorzien van een witte stok met één of meer rode ringen**, en overigens alle personen die zich moeilijk voortbewegen, voor laten gaan." De geleidehond staat niet in de wet | De wettekst geeft de app gelijk. Dat rode ringen in de praktijk doofblind aanduiden, staat niet in de wet en is hier niet nagezocht. Uitleg volgt nu de wettekst; de geleidehond staat er niet meer als wettelijke regel in. `i-blinde` (gewone witte stok) legt uit waarom je ook dan wacht |
+| `n-zebra-stilstaan` | "op en binnen 5 m **vóór**" de oversteekplaats, niet "binnen 5 m van" | Art. 23 lid 1 onder c: niet stilstaan "**op een oversteekplaats of binnen een afstand van vijf meter daarvan**". Dat geldt aan beide kanten, niet alleen ervoor | Geen: de app klopt |
+| Bord *inhaalverbod* (F1) | Een bromfiets is een motorvoertuig, dus "bromfietsers mag je wel inhalen" is fout | Bijlage I, F1: "Verbod voor motorvoertuigen om elkaar onderling in te halen". Art. 1: *motorvoertuigen* zijn "alle gemotoriseerde voertuigen **behalve bromfietsen**, fietsen met trapondersteuning en gehandicaptenvoertuigen". Een uitzondering voor tweewielige motorvoertuigen staat niet in F1; een motor inhalen mag dus niet | Geen: de app klopt |
+| Bord *autoweg* (G3) | "harder dan 50" in plaats van "minstens 50" | Bijlage I, G3: alleen "Autoweg". Art. 42 lid 2: motorvoertuig "waarmee met een snelheid van **ten minste 50 km per uur** mag en kan worden gereden" | Geen voor G3. Wel gevonden: bord *autosnelweg* (G1) en `n-snelweg-min` zeiden "harder dan 60". Art. 42 lid 1 zegt **ten minste 60**. Beide aangepast |
+| `k-inrit` | Leerlingen leren dit als art. 18 | Art. 54 noemt letterlijk "van een weg een inrit oprijden" als bijzondere manoeuvre: "moeten het overige verkeer voor laten gaan". Art. 18 gaat over afslaan en verkeer "op dezelfde weg"; een inrit is geen weg of kruispunt | Geen: art. 54 is de regel die hier geldt |
+| `i-rotonde-oprijden` | Richting aangeven bij het oprijden is een wettelijke regel, geen advies | Art. 17 lid 2: "Bestuurders moeten alvorens af te slaan een teken met hun richtingaanwijzer of met hun arm geven." Het verlaten van de rotonde is afslaan. Voor het **oprijden** noemen art. 17, 47, 48 en 55 geen plicht | Deels: bron was ten onrechte *veilig rijgedrag*, nu art. 17. Uitleg zegt nu wat de wet regelt (verlaten) en wat niet (oprijden). Antwoord blijft |
+
+Getest met `node tests/validate.js` en `node tests/logic.js`.
+
 ## Controle tegen de wettekst (28 september 2026)
 
 Alle vragen zijn opnieuw gecontroleerd, nu tegen de **geconsolideerde wetteksten zelf** in plaats van zoekresultaten. wetten.overheid.nl was vanuit de ontwikkelomgeving geblokkeerd. Daarom is de CC0-kopie van het Basis Wetten Bestand gebruikt uit [github.com/Apolloccrypt/wetgeving-nl](https://github.com/Apolloccrypt/wetgeving-nl). Die kopie is opgehaald van wetten.overheid.nl.
@@ -79,7 +97,7 @@ Elke vraag verwijst nu naar het juiste artikel.
 
 ### Niet in de wettekst te controleren
 
-- **Bijlage I (borden) en bijlage II (gebaren van verkeersregelaars)** zitten niet in de tekstkopie. De betekenis van de borden en de armgebaren is daarom niet artikel voor artikel gecontroleerd. Waar een artikel de regel geeft (erf, autosnelweg, autoweg, parkeren, haaientanden) is dat wel gebeurd.
+- **Bijlage I (borden) en bijlage II (gebaren van verkeersregelaars)** zitten niet in de tekstkopie. (Op 30 september 2026 zijn F1, G1 en G3 wel nagekeken in een andere kopie; zie hierboven.) De betekenis van de borden en de armgebaren is daarom niet artikel voor artikel gecontroleerd. Waar een artikel de regel geeft (erf, autosnelweg, autoweg, parkeren, haaientanden) is dat wel gebeurd.
 - **Een erf verlaten als "uitrit"** (`k-erf-verlaten`). Art. 54 noemt het erf niet letterlijk. Dat het verlaten van een erf onder "uit een uitrit de weg oprijden" valt, is de gangbare uitleg (CBR, theorie.nl).
 - **Richting aangeven bij het oprijden van een rotonde.** Art. 17 verplicht een teken bij afslaan; dat oprijden geen afslaan is, is de uitleg van VVN.
 - **100 km/h overdag op de snelweg.** De wet zegt 130 (art. 21). De 100 volgt uit verkeersbesluiten per traject, dus uit de borden.
@@ -173,7 +191,7 @@ Nagezocht zijn onder andere:
 2. **Ronde 2:** alle uitlegteksten, plus opnieuw alles wat in ronde 1 veranderde. Dit leverde 1 correctie op.
 3. **Ronde 3:** alleen de wijzigingen uit ronde 2 en de nieuwe items. Geen bevindingen, dus de controle is afgerond.
 
-## Examenvorm (28 september 2026)
+## Examenvorm (28 september 2026, nagekeken 30 september 2026)
 
 Bij de productreview bleek dat het proefexamen nog de oude vorm had (12 kennis met 10 goed, 28 inzicht met 25 goed, gevaarherkenning apart). Sinds **7 april 2025** is het CBR theorie-examen B één geheel:
 
@@ -182,7 +200,15 @@ Bij de productreview bleek dat het proefexamen nog de oude vorm had (12 kennis m
 - gevaarherkenning zit er als korte filmpjes tussen
 - vraagvormen: ja/nee, meerkeuze, invullen, aanklikken in een foto en slepen
 
-cbr.nl was vanuit de ontwikkelomgeving niet te openen. De vorm komt uit het [CBR-nieuwsbericht](https://www.cbr.nl/nl/over-het-cbr/over/laatste-nieuws/nieuws/vernieuwd-theorie-examen-b-rijbewijs-vanaf-7-april) zoals geciteerd door meerdere oefensites (Theorio, nutheorie.nl, turbotheorie.nl), die met elkaar overeenkomen. **Controleer dit op cbr.nl.** Het proefexamen in de app volgt nu deze vorm (`EXAM` in `js/app.js`), zonder filmpjes en foto's.
+**Controle op 30 september 2026.** cbr.nl was opnieuw niet te openen (ook niet via een webarchief). Wel waren zoekresultaten te zien die alleen uit cbr.nl kwamen. Die bevestigen de vorm. Het zijn samenvattingen van de zoekmachine, geen letterlijk gelezen pagina's:
+
+- [Vernieuwd theorie-examen B-rijbewijs vanaf 7 april](https://www.cbr.nl/nl/over-het-cbr/over/laatste-nieuws/nieuws/vernieuwd-theorie-examen-b-rijbewijs-vanaf-7-april): "het vernieuwde examen bestaat uit 50 vragen en [wordt] in één doorlopend geheel getoetst"; "De kandidaat is geslaagd wanneer binnen 30 minuten tijd minstens 44 vragen goed zijn beantwoord"; de filmpjes "toetsen onder andere elementen van gevaarherkenning, zoals waarnemen en voorspellen"; het oude onderdeel gevaarherkenning (met fototoets) vervalt; de zak-slaaggrens is "vergelijkbaar met die van het huidige examen".
+- [Hoe gaat het theorie-examen auto?](https://www.cbr.nl/nl/rijbewijs-halen/auto/theorie-examen-auto/hoe-gaat-het-theorie-examen-auto) en [Waarom staan er testvragen in het theorie-examen?](https://www.cbr.nl/nl/veelgestelde-vragen/waarom-staan-er-testvragen-in-het-theorie-examen): naast de 50 vragen krijg je **2 testvragen die niet meetellen**, dus 52 vragen in totaal. Welke vragen dat zijn, zie je niet.
+- [Wat voor vragen krijg je tijdens je theorie-examen auto?](https://www.cbr.nl/nl/rijbewijs-halen/auto/theorie-examen-auto/soort-vragen-tijdens-theorie): ja/nee, meerkeuze, invullen (getal), hotspot (aanklikken in een foto), sleepvragen (cijfers 1-2-3 of een vinkje naar de goede plek slepen).
+
+Een filmpje telt voor zover bekend als gewone vraag mee in de 50; een aparte score voor gevaarherkenning is er niet meer. Hoe een filmpjesvraag precies wordt nagekeken, stond niet in de zoekresultaten. Of de 30 minuten ook voor de testvragen gelden, ook niet.
+
+**Oordeel:** bevestigd door CBR-bronnen (via zoekresultaten), niet tegengesproken. `EXAM` in `js/app.js` blijft 50 / 30 minuten / 44. Het proefexamen volgt deze vorm, zonder filmpjes, foto's en testvragen.
 
 Bij dezelfde review zijn drie vragen aangescherpt:
 

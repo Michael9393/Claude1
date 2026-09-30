@@ -2,7 +2,7 @@
 // Verhoog CACHE bij elke nieuwe versie; de oude cache wordt dan opgeruimd.
 // Op GitHub Pages delen al je repo's één origin: raak alleen caches aan die met PREFIX beginnen.
 var PREFIX = 'theorie-b-';
-var CACHE = PREFIX + '2026-09-28b';
+var CACHE = PREFIX + '2026-09-30a';
 var FILES = [
   './',
   'index.html',
