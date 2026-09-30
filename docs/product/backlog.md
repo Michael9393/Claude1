@@ -3,43 +3,47 @@
 Priority: **M**ust / **S**hould / **C**ould / **W**on't (MoSCoW).
 Status: `idea` → `spec` → `approved` → `in progress` → `done`.
 
-Priorities for `idea` rows are the product strategist's proposal (29 September 2026) and still need the user's approval. R1 / R2 = review round 1 / round 2 in `docs/product-review/`.
+Priorities now reflect the user's answers of **30 September 2026** (see [vision.md](vision.md#decisions-from-the-user-30-september-2026)): a personal study tool for one first-time candidate who wants to pass the CBR theory exam B on the first try; no backend for now; GitHub Pages on a shared `username.github.io` origin; content checked by subagents/Codex; Dutch only; own use only. **Question 9 (MoSCoW) was not answered, so these priorities are the product strategist's proposal** and still need the user's approval.
+
+Rule used: anything that raises the user's own chance of passing first time goes up; growth, instructor, monetisation and multi-user features go to Won't. Rows are in proposed build order. R1 / R2 = review round 1 / round 2 in `docs/product-review/`.
 
 ## Candidates
 
-| Feature | Priority | Status | Spec |
-| ------- | -------- | ------ | ---- |
-| Accessibility High: exam time choice (30 min / extended / none) and spoken 5- and 1-minute warnings (R2-a11y 1) | M | idea | |
-| Accessibility High: move focus to the `<h1>` / question after each render and route change (R2-a11y 2) | M | idea | |
-| Accessibility Medium: flashcard keys only inside the card; vehicle focus ring; dark badges; input borders; spiekbriefje reflow at 320px (R2-a11y 3–7) | M | idea | |
-| Accessibility Low: green contrast, unique button names, answer state not only by colour, `aria-invalid` on number input (R2-a11y 8–12) | S | idea | |
-| Same-day practice of open mistakes; resolve only on a second day (R2-Ahmed) | M | idea | |
-| Result screen: score per topic, change since last mock exam, link to practise weak topics (R2-Ahmed, instructor) | M | idea | |
-| Result screen: say that hazard perception and photo questions are not covered, next to the pass line (R2-Ahmed) | S | idea | |
-| `store.js` hardening: skip `__proto__` keys, validate and cap `exams`, reject invalid `examDate` (R2-security 4, 5, 9) | M | idea | |
-| Service worker: `cache:'reload'` on install, network timeout, deep-path offline fallback (R2-security 8) | C | idea | |
-| Short privacy note: data stays on device, no tracking, GitHub Pages sees IP, how to delete (R2-security) | S | idea | |
-| Content fixes after checking against the law: `k-blinden`/`i-blinde`, `n-zebra-stilstaan`, `inhaalverbod`, `autoweg`, `k-inrit`, `i-rotonde-oprijden` (R2-instructor) | M | idea | |
-| Verify the exam-format claim word for word against cbr.nl (R1, R2-instructor) | M | idea | |
-| Open mistakes list shows the correct answer; move "Alle voortgang wissen" to a settings area (R2-Ahmed) | S | idea | |
-| Small UI: stray highlight on first exam option, units in Nakijken, hide nav during the exam, date input format (R2-Ahmed) | S | idea | |
-| Retake mode: "is this a retake? last score?" onboarding that seeds weak topics (R2-Ahmed) | S | idea | |
-| Exam-date plan: plan size and mock exams scale with days left; daily target line (R2-Ahmed, instructor) | S | idea | |
-| Readiness indicator from last 3 mock exams, topic accuracy and open mistakes (R1-PM, R2-market) | S | idea | |
-| Rewrite distractors in CBR style (2–3 plausible options, even lengths) (R1, R2-instructor) | S | idea | |
-| More voorrang scenarios (tram turning, fietspad, rotonde with fietsers, uitrit, voorrangsvoertuig; mark "jij"), target 40+ (R1, R2-instructor) | S | idea | |
-| More signs to ~100+, including onderborden and zones, plus road markings (R1, R2-instructor) | S | idea | |
-| Remove near-duplicate questions (R2-instructor) | C | idea | |
-| Hazard perception with still SVG scenes ("remmen / gas los / niets"), timed (R1, R2-instructor, R2-market bet 1) | S | idea | |
-| Photo / driver's-view illustration questions, hotspot and drag questions (R1, R2-instructor) | C | idea | |
-| Static SEO pages per rule / sign / number, generated from the data (R1, R2-market) | C | idea | |
-| Instructor link: progress snapshot via code/QR or export file, and homework topic sets (no backend) (R2-instructor, market) | C | idea | |
-| Progress export and import (R1, R2-security) | C | idea | |
-| B1 plain-language pass on the ~30 hardest prompts; tap-to-define glossary; "Bron" behind a toggle (R2-Ahmed, market) | C | idea | |
-| English mode (R2-market) | C | idea | |
-| Evening reminder (R2-Ahmed) — needs push, likely a backend | W | idea | |
-| Class dashboard for schools/instructors with live sync — needs a backend (R2-market) | W | idea | |
-| Paid tier / donations link (R2-market) | W | idea | |
+| # | Feature | Priority | Status | Spec | Why this priority |
+| - | ------- | -------- | ------ | ---- | ----------------- |
+| 1 | Verify the exam-format claim word for word against cbr.nl (R1, R2-instructor) | M | idea | | The mock exam and readiness signal are only as good as the format they copy; cheap. |
+| 2 | Content fixes after checking against the law: `k-blinden`/`i-blinde`, `n-zebra-stilstaan`, `inhaalverbod`, `autoweg`, `k-inrit`, `i-rotonde-oprijden` (R2-instructor) | M | idea | | No human expert checks content; a wrong fact costs points on the real exam. |
+| 3 | Result screen: score per topic, change since last mock exam, link to practise weak topics (R2-Ahmed, instructor) | M | idea | | Tells the user where the points are lost; basis for readiness. |
+| 4 | Same-day practice of open mistakes; resolve only on a second day (R2-Ahmed) | M | idea | | Fixes a gap while it is fresh; still needs a second day to count as learned. |
+| 5 | Exam-date plan for a first-timer: plan size and number of mock exams scale with days left; daily target line (R2-Ahmed, instructor) | M | idea | | Answers "what do I do today?" against a real deadline. |
+| 6 | Readiness indicator from last 3 mock exams, topic accuracy and open mistakes; shows the success bars (≥46/50, topic mastery) (R1-PM, R2-market) | M | idea | | A first-timer has no earlier score; this is the "am I ready to book / sit it?" signal. |
+| 7 | Hazard perception with still SVG scenes ("remmen / gas los / niets"), timed (R1, R2-instructor, R2-market bet 1) | M | idea | | Part of the real exam and not covered at all today; biggest content gap. Effort L. |
+| 8 | Rewrite distractors in CBR style (2–3 plausible options, even lengths) (R1, R2-instructor) | S | idea | | Makes mock scores a truer predictor; easy options inflate readiness. |
+| 9 | Result screen: say that hazard perception and photo questions are not covered, next to the pass line (R2-Ahmed) | S | idea | | Keeps the readiness signal honest; tiny. Can ride along with #3. |
+| 10 | More voorrang scenarios (tram turning, fietspad, rotonde with fietsers, uitrit, voorrangsvoertuig; mark "jij"), target 40+ (R1, R2-instructor) | S | idea | | Voorrang is up to 6 exam questions; more variety, less memorising of pictures. |
+| 11 | More signs to ~100+, including onderborden and zones, plus road markings (R1, R2-instructor) | S | idea | | Signs appear in many exam questions; current set is thin. |
+| 12 | Open mistakes list shows the correct answer; move "Alle voortgang wissen" to a settings area (R2-Ahmed) | S | idea | | Faster review; prevents wiping own progress by accident. |
+| 13 | Small UI: stray highlight on first exam option, units in Nakijken, hide nav during the exam, date input format (R2-Ahmed) | S | idea | | Small frictions in the exam flow the user uses most. |
+| 14 | Exam timer: spoken/visible 5- and 1-minute warnings (R2-a11y 1, part) | S | idea | | Useful for any user practising time management under real exam conditions. |
+| 15 | After each render and route change: move focus/scroll to the `<h1>` / question (R2-a11y 2) | S | idea | | On a phone the next question can start scrolled off-screen; a usability issue, not only screen-reader. |
+| 16 | Accessibility Medium, phone-relevant part: dark badges, input borders, spiekbriefje reflow at 320px (R2-a11y 5–7) | S | idea | | Visible on the user's own phone, especially in dark mode. |
+| 17 | Progress export and import (R1, R2-security) | S | idea | | Only copy of progress lives in one browser; Safari can clear site storage for sites not used for 7 days unless installed to the home screen ([WebKit](https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/)). |
+| 18 | `store.js` hardening: skip `__proto__` keys, validate and cap `exams`, reject invalid `examDate` (R2-security 4, 5, 9) | S | idea | | Protects the user's own data; other apps on the shared `github.io` origin can read and write the same `localStorage`. Invalid `examDate` also breaks the plan (#5). |
+| 19 | Service worker: `cache:'reload'` on install, network timeout, deep-path offline fallback (R2-security 8) | S | idea | | Stale cache after updates would hide content fixes (#2); offline study must work. Scope stays limited to this repo's path on the shared origin. |
+| 20 | Remove near-duplicate questions (R2-instructor) | C | idea | | Duplicates waste practice time but do not teach anything wrong. |
+| 21 | Photo / driver's-view illustration questions, hotspot and drag questions (R1, R2-instructor) | C | idea | | Covers exam question types, but effort is high and hazard perception (#7) matters more. |
+| 22 | Accessibility: exam time choice (extended / none) (R2-a11y 1, part) | C | idea | | The user should practise at the real 30 minutes; an untimed mode is a nice-to-have for learning. |
+| 23 | Accessibility Medium, keyboard part: flashcard keys only inside the card; vehicle focus ring (R2-a11y 3–4) | C | idea | | Keyboard-only issues; the user studies on a phone. |
+| 24 | Accessibility Low: green contrast, unique button names, answer state not only by colour, `aria-invalid` on number input (R2-a11y 8–12) | C | idea | | Minor for a sighted phone user; cheap to batch with other UI work. |
+| 25 | Retake mode: "is this a retake? last score?" onboarding that seeds weak topics (R2-Ahmed) | W | idea | | The user is a first-timer; readiness (#6) covers the same need. |
+| 26 | Short privacy note: data stays on device, no tracking, GitHub Pages sees IP, how to delete (R2-security) | W | idea | | Own use only; the user already knows where the data is. |
+| 27 | Static SEO pages per rule / sign / number, generated from the data (R1, R2-market) | W | idea | | Growth is a non-goal. |
+| 28 | Instructor link: progress snapshot via code/QR or export file, and homework topic sets (R2-instructor, market) | W | idea | | No instructor in the loop. |
+| 29 | B1 plain-language pass on the ~30 hardest prompts; tap-to-define glossary; "Bron" behind a toggle (R2-Ahmed, market) | W | idea | | Built for a B1 learner; the user reads Dutch fluently. |
+| 30 | English mode (R2-market) | W | idea | | Dutch only (user, answer 7). |
+| 31 | Evening reminder (R2-Ahmed) — needs push, likely a backend | W | idea | | Needs a backend, which is undecided; the daily plan covers the habit. |
+| 32 | Class dashboard for schools/instructors with live sync — needs a backend (R2-market) | W | idea | | Multi-user and needs a backend. |
+| 33 | Paid tier / donations link (R2-market) | W | idea | | Own use only, no money (user, answer 8). |
 
 ## Already shipped (round 1 fixes, 28 September 2026)
 

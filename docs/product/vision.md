@@ -1,79 +1,117 @@
 # Product vision
 
-> Status: **partly decided.** The product already exists and has had two review rounds ([round 1](../product-review/README.md), [round 2](../product-review/round-2/README.md)). The sections below record what the product and the reviews already settle. The next increment is **pending the user's choice** (see [MVP / next increment](#mvp--next-increment)).
+> Status: **partly decided.** The product already exists and has had two review rounds ([round 1](../product-review/README.md), [round 2](../product-review/round-2/README.md)). On 30 September 2026 the user answered the strategist's questions and set the direction: **a personal study tool for one first-time candidate (the user), with the goal of passing the CBR theory exam B on the first try.** The next increment is still **pending the user's pick** (see [MVP / next increment](#mvp--next-increment)).
 >
-> Notation: **Fact** = true of the shipped app or stated in a review with a source. **Opinion** = the product strategist's judgement (29 September 2026), open to change by the user.
+> Notation: **Fact** = true of the shipped app, stated in a review with a source, or answered by the user. **Opinion** = the product strategist's judgement (30 September 2026), open to change by the user.
+
+## Decisions from the user (30 September 2026)
+
+**Facts (the user's answers)**
+
+1. Goal: for themselves, to pass the CBR theory exam B.
+2. First user: themselves, a first-time candidate who wants to pass on the first try (not a retake).
+3. Time: own pace, no fixed budget per increment.
+4. Backend: not decided; the user asked for an explanation. Until then: **no backend** (see [Open questions](#open-questions)).
+5. Hosting: GitHub Pages, on the shared `username.github.io` origin.
+6. Content checking: by subagents and possibly Codex; no human instructor or expert.
+7. Language: Dutch only.
+8. Money: own use only; no donations, paid tiers or grants.
+9. MoSCoW priorities: not answered, so the priorities in [backlog.md](backlog.md) are the strategist's proposal.
 
 ## Problem
 
 **Facts**
 
-- Learners for the Dutch car licence must pass the CBR theory exam B: since 7 April 2025 one block of 50 questions, 30 minutes, 44 needed to pass, with hazard perception built in as animations (round 1, review 5; round 2, review 5, secondary sources, cbr.nl was blocked from the review environment).
+- The CBR theory exam B, since 7 April 2025: one block of 50 questions, 30 minutes, 44 needed to pass, with hazard perception built in (round 1, review 5; round 2, review 5; secondary sources, since cbr.nl was blocked from the review environment, so this still needs a word-for-word check).
 - About 40% pass first time (39.7% in 2024, 40% in 2025), and a retake costs about €50 plus weeks of waiting (round 2, review 5).
-- Competing prep products cost roughly €40–50, need an account, and do not show why an answer is right. Free sites are thin or ad-driven (round 2, review 5).
-- Learners with Dutch as a second language get stuck on legal and compound vocabulary, not on the rules themselves (round 2, review 3, "Ahmed").
+- In the persona test, the learner's mock-exam score rose from 38/50 to 43/50 in three evenings, still below the pass line (round 2, review 3).
+- The instructor review found no factual errors in the numbers but left 6 content points to check against the law (round 2, review 1).
 
 **Opinion**
 
-- The pain this app can solve best is *"I keep getting rules wrong and I don't know why"*, felt daily in the 2–6 weeks before the exam, and more sharply in the 10 days before a retake.
+- The user's pain is *"I don't know whether I'm ready, and I don't know what to study today to get there."* A first-timer has no earlier score to calibrate on, so the app has to supply that signal.
+- With no human expert checking content, a wrong answer in the question bank is a direct risk to the user's own exam. Content correctness therefore matters as much as features.
 
 ## Target users
 
-**Facts (who the reviews tested with or named)**
+**Facts**
 
-- **First-time learners, 16½–18**, studying on a phone in short sessions, usually next to a paid course or book ("Sanne", 17, round 1).
-- **Retake candidates short on time**, often working, sometimes with Dutch as a second language ("Ahmed", 24, B1 Dutch, retake in 10 days, round 2).
-- **Driving instructors** who would recommend it if they could see and steer a student's progress (round 2, review 1).
-- Named by the market analyst as reachable niches: NT2 / newcomers, VO/MBO schools, expats (round 2, review 5).
+- One user: the owner of this repository, a first-time candidate for exam B, studying on a phone, sighted, Dutch-speaking.
 
 **Opinion**
 
-- Primary user for now: **the learner who is already paying for a course or book and wants a free, trustworthy second tool**, with retake candidates as the sharpest sub-group. Instructors are a channel to reach them, not a primary user.
+- Design every decision for this one person. Other learners may find the app on GitHub Pages, but they are not a target and the app should not bend to them.
 
 ## Goals
 
-**Facts (what the shipped app already aims at)**
+**Facts (what the shipped app already does)**
 
 - Free, no account, no ads, works offline (PWA, `localStorage`).
 - Every answer is backed by a cited legal source (`docs/verificatie.md`).
-- Learning design, not just exam drilling: spaced repetition, a mistake log that resolves on two different days, a one-tap "Vandaag" plan.
-- A mock exam that matches the current CBR format (50 / 30 min / 44).
+- Spaced repetition, a mistake log that resolves on two different days, a one-tap "Vandaag" plan.
+- A mock exam in the current CBR format (50 / 30 min / 44).
 
 **Opinion (goals for the next phase)**
 
-- A learner can tell, from the app, what to do today and whether they are close to ready, and trusts that signal.
-- The app is usable by keyboard and screen reader to WCAG 2.2 AA.
-- Positioning: *"Oefenen met bewijs: bij elk antwoord het wetsartikel."* (round 2, review 5).
+- **Pass the real exam on the first try.** Everything else serves this.
+- The user knows each day what to study, given the days left to the exam date.
+- The user can trust a readiness signal: per topic and overall, based on recent mock exams and practice, with a clear statement of what the app does not cover (hazard perception, photo questions).
+- The mock exam feels like the real one: format, timing and distractor style.
+- The question bank is correct: every open content point checked against the law and recorded in `docs/verificatie.md`.
 
 ## Non-goals
 
-**Facts (decided by the stack and the reviews)**
+**Facts (decided by the stack, the reviews and the user's answers)**
 
-- No accounts, no server-side storage of learner data, no tracking, no ads, no data sales (README; round 2, reviews 4 and 5).
+- No accounts, no server-side storage, no tracking, no ads (README; round 2, reviews 4 and 5).
 - No official CBR questions or CBR photos; content is written from the law (README).
-- Not competing on question volume (1,500–3,500 at competitors) or on video hazard perception (round 2, review 5).
+- Dutch only (user, answer 7).
+- No monetisation: no donations, paid tiers or grants (user, answer 8).
 
-**Opinion**
+**Opinion (follow from "one first-time user")**
 
-- No backend in the next increment. Anything that needs one (instructor dashboards with live sync, reminders by push from a server) waits until the user explicitly accepts running a server.
-- No paid tier in the next increment.
+- No growth work: no SEO pages, no marketing, no positioning copy for other learners.
+- No instructor or school features (links, homework sets, dashboards). There is no instructor in the loop (user, answer 6).
+- No B1 plain-language mode and no English mode.
+- No multi-user concerns: no privacy notice aimed at the public, no retake onboarding, no support for other personas.
+- No backend until the user decides on it (user, answer 4).
+- Accessibility work is judged by usability for a sighted phone user, not by WCAG conformance as a goal in itself. Items that also make the app nicer on a phone (timer warnings, focus and scroll position after a new question, 320px reflow) stay in.
+- Not competing on question volume or video hazard perception.
 
 ## MVP / next increment
 
-> **Pending the user's choice.** The strategist's recommended option is **"Retake & exam-date plan, with the round-2 quick fixes first"** (see the brainstorm in the conversation of 29 September 2026). The round-1 MVP (mock exam in the current format, Vandaag, mistakes log, installable offline app) is already shipped; see the `done` rows in [backlog.md](backlog.md).
+> **Pending the user's pick.** The round-1 MVP (mock exam in the current format, Vandaag, mistake log, installable offline app) is shipped; see the `done` rows in [backlog.md](backlog.md).
+
+**Updated recommendation (opinion):** start with **"Exam-ready loop"**, in this order:
+
+1. **Trust the content first** (small): verify the exam format against cbr.nl and fix the 6 open content points against the law. Cheap, and a wrong fact in the bank costs points on the real exam.
+2. **Know where you stand** (medium): result screen with score per topic and change since the last mock exam, plus a readiness indicator from the last 3 mock exams, topic accuracy and open mistakes, with a note that hazard perception and photo questions are not covered.
+3. **Know what to do today** (medium): an exam-date plan for a first-timer, where plan size and number of mock exams scale with days left, with same-day practice of today's mistakes.
+
+Hazard perception (still SVG scenes) is the biggest content gap after that, and a candidate for the increment after.
 
 ## Success measures
 
-**Facts (what the reviews used as evidence)**
+**Facts (current baseline)**
 
-- Ahmed went from 38/50 to 43/50 in three evenings (round 2, review 3).
-- Accessibility: 2 High and 5 Medium WCAG 2.2 AA findings open (round 2, review 2).
-- The instructor found no factual errors in the numbers; 6 content points are open to check (round 2, review 1).
+- Persona test: 38/50 to 43/50 in three evenings (round 2, review 3).
+- 6 content points open to check (round 2, review 1).
+- No analytics exist; the app stores mock-exam results in `localStorage`, so the measures below can be read from the user's own device.
 
-**Opinion (proposed measures; no analytics exist, so these are checked in review rounds and user tests, not tracked)**
+**Opinion (proposed measures)**
 
-- A retake learner who sets an exam date and last score gets a different, date-aware plan each evening, and can name their 2 weakest topics after one mock exam without reading every wrong answer.
-- In a persona test, mock-exam score rises between the first and third timed exam.
-- 0 High and 0 Medium WCAG findings in the next accessibility audit.
-- Every content change is recorded in `docs/verificatie.md`; 0 factual errors found in the next instructor review.
-- An instructor reviewer says they would recommend it "next to the theory book" without caveats about the mock-exam format or accessibility.
+- **Primary:** the user passes the real CBR theory exam B on the first try.
+- In the last 7 days before the exam: every mock exam scores at least 46/50 (2 above the pass line, as a margin for exam nerves and uncovered question types).
+- Every topic is above a mastery threshold (proposal: at least 90% correct over the last 20 answers in that topic) at least 3 days before the exam.
+- 0 open mistakes older than 2 days on the day before the exam.
+- Every content point from the reviews is checked and recorded in `docs/verificatie.md`; 0 factual errors found by the next subagent/Codex content review.
+
+## Open questions
+
+Only the user can answer these:
+
+1. **Backend (answer 4):** do you want an explanation now? In short: without a backend everything stays on your phone (simple, free, private, but lost if the browser clears storage and not shared between devices). A backend would allow sync between phone and laptop and push reminders, but needs a server, an account and upkeep. Current assumption: no backend.
+2. **Exam date:** do you have one booked? It sets how much fits in before the exam and which increment comes first.
+3. **Devices:** do you study only on your phone, or also on a laptop? If both, progress export/import becomes more important.
+4. **Mastery threshold:** is "46/50 in the last week" and "90% per topic" the bar you want, or stricter/looser?
+5. **MoSCoW (answer 9):** do you accept the proposed priorities in [backlog.md](backlog.md)?
