@@ -1,6 +1,6 @@
 # Spec: Exam-ready loop
 
-- **Status:** draft
+- **Status:** approved (30 September 2026). Part 1 in progress.
 - **Priority:** Must
 - **Related:** backlog #3, #4, #5, #6 (combined here); #9 rides along (AC-6); overlaps #18 (store hardening, only for the fields this spec reads). Vision: [success measures](../vision.md#success-measures). Backlog #1–#2 (exam format, content fixes) are `done`, so "trust the content first" is satisfied.
 
@@ -72,7 +72,7 @@ New per day = min(20, ⌈U / max(1, D − R)⌉) with reserve R = min(14, floor(
 
 **Part 3: readiness (start page only)**
 
-- **AC-29:** Given the start page, then a readiness block shows three eisen, each with status and numbers: (1) "Minstens 3 proefexamens, de laatste 3 allemaal 46 of meer goed" (e.g. "2 van 3 gedaan, laagste 45"; wording pending question 1); (2) "Elk onderwerp 90% of meer goed over de laatste 20 antwoorden" (topics below, lowest first); (3) "Geen open fouten ouder dan 2 dagen" (e.g. on 30 September: "3 fouten van vóór 28 september").
+- **AC-29:** Given the start page, then a readiness block shows three eisen, each with status and numbers: (1) "Minstens 3 proefexamens, de laatste 3 allemaal 46 of meer goed" (e.g. "2 van 3 gedaan, laagste 45"); (2) "Elk onderwerp 90% of meer goed over de laatste 20 antwoorden" (topics below, lowest first); (3) "Geen open fouten ouder dan 2 dagen" (e.g. on 30 September: "3 fouten van vóór 28 september").
 - **AC-30:** Given a topic with 17 entries of which 15 ok, then it shows "88% (15/17), nog te weinig antwoorden (17/20)" and does not meet eis 2; with 0 entries, "nog geen antwoorden" (not 0%).
 - **AC-31:** Given every unmet eis, then it has a button: "Doe een proefexamen", "Oefen <onderwerp>" (per topic), "Oefen oude fouten". Status: all met "Klaar volgens deze app"; one unmet "Bijna: <what is missing>" (e.g. "Bijna: nog 1 proefexamen"); else "Nog niet". No answers and no mocks: "Nog geen gegevens" with a link to Vandaag.
 - **AC-32:** Given any status, including "Klaar", then the block states "Gevaarherkenning en vragen met foto's meet deze app niet. Oefen die met je theorieboek en de filmpjes die erbij horen.", "Je kent veel van deze vragen al; het echte examen heeft andere vragen." and "x van 243 vragen minstens 1× gezien".
@@ -132,12 +132,12 @@ Start page: date choice, target line with minutes, readiness block with action b
 
 - Month-only date: the plan counts to the 1st of the month; from the 1st while that month is current, maintenance mode (AC-26).
 - Theory-book chapters: out of scope.
+- **Eis 1:** the last 3 mock exams all 46 or more (not "3 in 7 days"). No higher margin than 46.
+- **Timed-out mock:** counts toward readiness, open questions as wrong.
+- **Move the date:** the app does **not** suggest moving the exam date.
+- **Workload:** about 15 minutes a day (up to 30 questions, max 20 new) plus a 30-minute mock every few days.
+- **Build order:** Part 1 first, then Part 2, then Part 3.
 
 ## Open questions
 
-- [ ] **1. Eis 1:** "de laatste 3 proefexamens allemaal ≥ 46" or "minstens 3 in de laatste 7 dagen, elk ≥ 46"? *Recommendation: the last 3; the plan's mock rhythm (every 4 days, every 2 in the last 2 weeks) can reach it, and a missed week does not reset it.*
-- [ ] **2. Margin:** should "Klaar" need more than 46 (e.g. 47 or 48) because the bank is small and questions get familiar? *Recommendation: keep 46 and rely on the honesty lines and least-recently-seen mocks; revisit if mock scores rise mainly from memorising.*
-- [ ] **3. Timed-out mock:** does a mock that ran out of time count toward readiness? *Recommendation: yes, with open questions as wrong; the real exam does the same.*
-- [ ] **4. Move the date:** at 7 days before a precise date with status "Nog niet", should the app suggest moving the exam? *Recommendation: yes, one calm line with what is missing; no repeat after dismissing.*
-- [ ] **5. Workload:** is about 15 minutes a day (30 questions, cap 20 new) plus a 30-minute mock every few days right for you? *Recommendation: yes; lower the caps if you miss days often.*
-- [ ] **6. Build order:** Part 1 now, then 2, then 3, or all at once? *Recommendation: Part 1 now, so history is collected while Parts 2 and 3 are built.*
+All answered by the user on 30 September 2026 (see Decided).
