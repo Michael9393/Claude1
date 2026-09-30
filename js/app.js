@@ -405,8 +405,8 @@
           if (!v) { precise = true; store.setExamDate(null); }
           else if (U.isDay(v) && U.daysUntil(v, Date.now()) >= 0) store.setExamDate(v);
           // Een dag in het verleden slaan we niet op. Tussenstanden tijdens het typen van het jaar
-          // (Chrome meldt 0002, 0020, 0202) negeren we, anders knippert de melding.
-          else if (Number(v.slice(0, 4)) >= 1000) typedPast = true;
+          // (Chrome meldt 0002, 0020, 0202, of 20271 bij een vijfde cijfer) negeren we, anders knippert de melding.
+          else if (U.isDay(v) && Number(v.slice(0, 4)) >= 1000) typedPast = true;
           update();
         };
       } else {
