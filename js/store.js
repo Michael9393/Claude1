@@ -17,9 +17,9 @@
   }
 
   function isObj(v) { return v != null && typeof v === 'object' && !Array.isArray(v); }
-  function num(v) { return typeof v === 'number' && isFinite(v) ? v : 0; }
-  function isInt(v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v; }
-  function own(obj, k) { return Object.prototype.hasOwnProperty.call(obj, k); }
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function num(v) { return isNum(v) ? v : 0; }
+  function isInt(v) { return isNum(v) && Math.floor(v) === v; }
   // Sleutels die een gewoon object kapot kunnen maken als je ze uit de opslag overneemt.
   function safeKey(k) { return k !== '__proto__' && k !== 'constructor' && k !== 'prototype'; }
   function eachValid(src, ok) {
@@ -35,10 +35,7 @@
     s.srs = eachValid(raw.srs, function (c) { return isObj(c) && typeof c.box === 'number' && typeof c.due === 'number'; });
     s.mistakes = eachValid(raw.mistakes, function (m) { return isObj(m) && typeof m.count === 'number'; });
     s.done = eachValid(raw.done, function (v) { return typeof v === 'boolean'; });
-    Object.keys(s.mistakes).forEach(function (id) {
-      var m = s.mistakes[id];
-      if (!(typeof m.last === 'number' && isFinite(m.last))) delete m.last;
-    });
+    Object.keys(s.mistakes).forEach(function (id) { if (!isNum(s.mistakes[id].last)) delete s.mistakes[id].last; });
     s.exams = Array.isArray(raw.exams) ? raw.exams.map(cleanExam).filter(Boolean) : [];
     if (isObj(raw.stats)) s.stats = { answered: num(raw.stats.answered), correct: num(raw.stats.correct) };
     if (U.isDay(raw.examDate)) s.examDate = raw.examDate;
@@ -63,7 +60,7 @@
   // Een proefexamen uit de opslag: null als het niet te redden is.
   // Oud formaat (kennis/inzicht, zonder score en total) blijft staan.
   function cleanExam(e) {
-    if (!isObj(e) || typeof e.date !== 'number' || !isFinite(e.date)) return null;
+    if (!isObj(e) || !isNum(e.date)) return null;
     var out = { date: e.date, passed: !!e.passed, timeUp: !!e.timeUp };
     if (e.score != null || e.total != null) {
       if (!isInt(e.score) || !isInt(e.total) || e.score < 0 || e.score > e.total || e.total > 50) return null;
@@ -92,7 +89,7 @@
     var t = String(item.topic);
     if (!safeKey(t)) return;
     var day = U.dayKey();
-    var list = own(state.history, t) ? state.history[t] : (state.history[t] = []);
+    var list = Object.prototype.hasOwnProperty.call(state.history, t) ? state.history[t] : (state.history[t] = []);
     if (list.some(function (h) { return h.id === item.id && h.day === day; })) return;
     list.push({ id: item.id, ok: !!ok, day: day });
     if (list.length > HISTORY) list.splice(0, list.length - HISTORY);

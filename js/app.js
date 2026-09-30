@@ -272,13 +272,22 @@
     }
     next();
   }
+  // Klikfunctie voor een sessie waarbij "Nog een ronde" een nieuwe lijst maakt.
+  function repeating(title, makeList, opts) {
+    return function start() { runSession(title, makeList(), start, opts); };
+  }
+  // Open fouten sorteren: de laatst foute eerst.
+  function newestMistake(a, b) {
+    var m = store.state().mistakes;
+    return (Number(m[b].last) || 0) - (Number(m[a].last) || 0);
+  }
 
   // ---------- Vandaag: één knop voor wat je nu het beste kunt oefenen ----------
   // Open fouten (die vandaag nog niet goed waren), kaarten die aan de beurt zijn en een paar nieuwe vragen.
   function todayPlan() {
     var mistakes = store.openMistakes(known)
       .filter(function (id) { return !store.okToday(id); })
-      .sort(function (a, b) { return (Number(store.state().mistakes[b].last) || 0) - (Number(store.state().mistakes[a].last) || 0); })
+      .sort(newestMistake)
       .map(function (id) { return items[id]; });
     var inPlan = {};
     mistakes = mistakes.slice(0, 10);
@@ -587,13 +596,9 @@
         return '<figure><div class="bord">' + signSvg(s, s.name) + '</div><figcaption><strong>' + esc(s.name) + '</strong><span>' + esc(s.meaning) + '</span></figcaption></figure>';
       }).join('') + '</div></section>';
     main.querySelectorAll('[data-mode]').forEach(function (b) {
-      b.onclick = function () {
-        var rev = b.getAttribute('data-mode') === 'omgekeerd';
-        var start = function () {
-          runSession(rev ? 'Welk bord is het?' : 'Verkeersborden', sample(all(function (x) { return x.kind === 'sign'; }), 10), start, { reverse: rev });
-        };
-        start();
-      };
+      var rev = b.getAttribute('data-mode') === 'omgekeerd';
+      b.onclick = repeating(rev ? 'Welk bord is het?' : 'Verkeersborden',
+        function () { return sample(all(function (x) { return x.kind === 'sign'; }), 10); }, { reverse: rev });
     });
   };
 
@@ -611,10 +616,7 @@
         return '<li><button class="scenario" data-id="' + v.id + '">' + mark + '<span>Kruispunt ' + it.nr +
           (st === true ? '<span class="klein"> · ' + esc(v.title) + '</span>' : '') + '</span></button></li>';
       }).join('') + '</ul></section>';
-    main.querySelector('[data-act=alle]').onclick = function () {
-      var start = function () { runSession('Voorrang', shuffle(all(function (x) { return x.kind === 'voorrang'; })), start); };
-      start();
-    };
+    main.querySelector('[data-act=alle]').onclick = repeating('Voorrang', function () { return shuffle(all(function (x) { return x.kind === 'voorrang'; })); });
     main.querySelectorAll('.scenario').forEach(function (b) {
       b.onclick = function () {
         var id = b.getAttribute('data-id');
@@ -632,14 +634,8 @@
       '<section class="kaart"><details><summary>Spiekbriefje</summary><table class="tabel"><tbody>' +
       nums.map(function (n) { return '<tr><td>' + esc(n.q) + '</td><td class="getal">' + esc(fmtNum(n.answer) + ' ' + n.unit) + '</td></tr>'; }).join('') +
       '</tbody></table></details></section>';
-    main.querySelector('[data-act=start]').onclick = function () {
-      var start = function () { runSession('Getallen', sample(nums, 10), start); };
-      start();
-    };
-    main.querySelector('[data-act=alle]').onclick = function () {
-      var start = function () { runSession('Getallen', shuffle(nums), start); };
-      start();
-    };
+    main.querySelector('[data-act=start]').onclick = repeating('Getallen', function () { return sample(nums, 10); });
+    main.querySelector('[data-act=alle]').onclick = repeating('Getallen', function () { return shuffle(nums); });
   };
 
   // ----- Proefexamen -----
@@ -772,7 +768,7 @@
         '<div class="rij"><a class="knop" href="#/start">Begin met oefenen</a></div></section>';
       return;
     }
-    var recent = openIds.slice().sort(function (a, b) { return (Number(st.mistakes[b].last) || 0) - (Number(st.mistakes[a].last) || 0); });
+    var recent = openIds.slice().sort(newestMistake);
 
     main.innerHTML = '<section class="kaart"><h1>Foutenlogboek</h1>' +
       '<p>' + openIds.length + ' open ' + (openIds.length === 1 ? 'fout' : 'fouten') + '. Een fout is opgelost als je die vraag daarna goed hebt op <strong>twee verschillende dagen</strong>. Zo weet je zeker dat je het onthoudt.</p>' +
