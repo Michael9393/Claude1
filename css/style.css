@@ -115,7 +115,12 @@ h3 { margin: 12px 0 6px; font-size: 1.05rem; }
 .tegel h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .tegel .groot { font-size: 1.1rem; font-weight: 600; margin: 0; }
 .tegel .klein { margin: 2px 0 0; }
-.datum input { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+.datum label { display: block; font-weight: 600; margin-bottom: 4px; }
+.datum-rij { display: flex; flex-wrap: wrap; gap: 8px; }
+.datum input, .datum select { font: inherit; min-height: 44px; max-width: 100%; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+.datum-veld:empty { display: none; }
+.datum-hint { margin: 4px 0 0; }
+.link-knop.in-tekst { padding: 0; font-size: inherit; color: var(--accent); }
 .aftellen { margin: 8px 0 0; }
 
 /* Vragen */

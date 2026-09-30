@@ -278,7 +278,7 @@
   function todayPlan() {
     var mistakes = store.openMistakes(known)
       .filter(function (id) { return !store.okToday(id); })
-      .sort(function (a, b) { return store.state().mistakes[b].last - store.state().mistakes[a].last; })
+      .sort(function (a, b) { return (Number(store.state().mistakes[b].last) || 0) - (Number(store.state().mistakes[a].last) || 0); })
       .map(function (id) { return items[id]; });
     var inPlan = {};
     mistakes = mistakes.slice(0, 10);
@@ -322,11 +322,6 @@
     var due = cards.filter(function (c) { return store.isDue(c.id); }).length;
     var open = store.openMistakes(known).length;
     var last = st.exams[st.exams.length - 1];
-    var days = null;
-    if (st.examDate) {
-      var d = new Date(st.examDate + 'T00:00:00');
-      days = Math.round((d - U.dayStart()) / 86400000);
-    }
     var parts = [];
     if (plan.mistakes.length) parts.push(plan.mistakes.length + ' ' + (plan.mistakes.length === 1 ? 'fout' : 'fouten') + ' herhalen');
     if (plan.due.length) parts.push(plan.due.length + ' ' + (plan.due.length === 1 ? 'kaart' : 'kaarten') + ' herhalen');
@@ -335,8 +330,11 @@
     main.innerHTML =
       '<section class="kaart intro"><h1>Oefenen voor je theorie-examen auto (B)</h1>' +
       '<p class="belofte">Gratis, zonder account en zonder reclame. Bij elke vraag zie je op welke regel uit de wet het antwoord is gebaseerd.</p>' +
-      '<label class="datum">Examendatum: <input type="date" value="' + esc(st.examDate || '') + '"></label>' +
-      (days != null ? '<p class="aftellen">' + (days > 0 ? 'Nog <strong>' + days + '</strong> ' + (days === 1 ? 'dag' : 'dagen') + ' tot je examen.' : days === 0 ? '<strong>Vandaag is je examen. Succes!</strong>' : 'Je examendatum is voorbij.') + '</p>' : '') +
+      '<div class="datum"><label for="examen-soort">Examendatum</label>' +
+      '<div class="datum-rij"><select id="examen-soort">' +
+      '<option value="geen">Nog niet gepland</option><option value="maand">Maand (schatting)</option><option value="datum">Precieze datum</option>' +
+      '</select><span class="datum-veld"></span></div>' +
+      '<p class="aftellen" role="status"></p><p class="klein datum-hint" hidden></p></div>' +
       '</section>' +
       '<section class="kaart vandaag"><h2>Vandaag</h2>' +
       (plan.list.length
@@ -353,13 +351,134 @@
       tile('#/fouten', 'Foutenlogboek', open + ' open ' + (open === 1 ? 'fout' : 'fouten'), st.stats.answered ? pct(st.stats.correct, st.stats.answered) + '% goed van ' + st.stats.answered : 'Nog niets beantwoord') +
       '</div>' +
       '<p class="noot">Dit is een eigen oefenapp met eigen vragen, geen officieel CBR-materiaal. Gevaarherkenning (de filmpjes in het echte examen) zit er nog niet in. Controleer twijfelgevallen altijd bij het CBR of in je theorieboek.</p>';
-    main.querySelector('input[type=date]').onchange = function (e) {
-      store.setExamDate(e.target.value);
-      views.start();
-    };
+    examDateControl(main.querySelector('.datum'));
     var btn = main.querySelector('[data-act=vandaag]');
     if (btn) btn.onclick = runToday;
   };
+
+  // Examendatum op de startpagina: "Nog niet gepland", een maand (schatting) of een precieze datum.
+  // Bij een wijziging passen we alleen dit blok aan, nooit het datumveld waarin je aan het typen bent.
+  function examDateControl(box) {
+    var kindSel = box.querySelector('#examen-soort');
+    var slot = box.querySelector('.datum-veld');
+    var status = box.querySelector('.aftellen');
+    var hint = box.querySelector('.datum-hint');
+    var precise = false; // "Precieze datum" gekozen, maar nog geen datum opgeslagen
+    var typedPast = false; // de getypte datum ligt voor vandaag (niet opgeslagen)
+
+    function kind() {
+      var st = store.state();
+      return precise || st.examDate ? 'datum' : st.examMonth ? 'maand' : 'geen';
+    }
+
+    // Tweede keuzelijst of datumveld; alleen opnieuw tekenen als het soort verandert.
+    function drawField() {
+      var st = store.state();
+      var k = kind();
+      if (slot.getAttribute('data-soort') === k) return;
+      slot.setAttribute('data-soort', k);
+      if (k === 'maand') {
+        var months = U.monthList(Date.now(), 12);
+        var opts = months.map(function (m) {
+          return '<option value="' + esc(m) + '"' + (m === st.examMonth ? ' selected' : '') + '>' + esc(U.monthLabel(m)) + '</option>';
+        });
+        // Een opgeslagen maand die niet (meer) in de lijst staat, blijft zichtbaar.
+        if (months.indexOf(st.examMonth) < 0) {
+          var past = U.examInfo(null, st.examMonth, Date.now()).phase === 'voorbij';
+          opts.unshift('<option value="' + esc(st.examMonth) + '" selected' + (past ? ' data-voorbij="1"' : '') + '>' +
+            esc(U.monthLabel(st.examMonth)) + (past ? ' (voorbij)' : '') + '</option>');
+        }
+        slot.innerHTML = '<select aria-label="Maand van je examen">' + opts.join('') + '</select>';
+        var monthSel = slot.querySelector('select');
+        monthSel.onchange = function () {
+          store.setExamMonth(monthSel.value);
+          var old = monthSel.querySelector('[data-voorbij]');
+          if (old && !old.selected) old.remove();
+          update();
+        };
+      } else if (k === 'datum') {
+        slot.innerHTML = '<input type="date" aria-label="Dag van je examen" min="' + esc(U.dayKey()) + '" value="' + esc(st.examDate || '') + '">';
+        var input = slot.querySelector('input');
+        input.onchange = function () {
+          var v = input.value;
+          typedPast = false;
+          if (!v) { precise = true; store.setExamDate(null); }
+          else if (U.isDay(v) && U.daysUntil(v, Date.now()) >= 0) store.setExamDate(v);
+          // Een dag in het verleden slaan we niet op. Tussenstanden tijdens het typen van het jaar
+          // (Chrome meldt 0002, 0020, 0202) negeren we, anders knippert de melding.
+          else if (Number(v.slice(0, 4)) >= 1000) typedPast = true;
+          update();
+        };
+      } else {
+        slot.innerHTML = '';
+      }
+    }
+
+    function promptButton(before, label, after) {
+      return esc(before) + '<button type="button" class="link-knop in-tekst" data-act="precies">' + esc(label) + '</button>' + esc(after);
+    }
+
+    // Statusregel en eventuele tip, zonder de invoervelden te vervangen.
+    function update() {
+      var st = store.state();
+      var k = kind();
+      kindSel.value = k;
+      drawField();
+      var info = U.examInfo(st.examDate, st.examMonth, Date.now());
+      var text = '', tip = '';
+      if (k === 'datum' && typedPast) {
+        text = 'Die dag is al voorbij. Kies een dag vanaf vandaag.';
+      } else if (k === 'datum' && info.mode !== 'datum') {
+        text = 'Kies de dag van je examen.';
+        if (info.mode === 'maand' && info.phase !== 'voorbij') text += ' Tot dan rekent het plan met ' + U.monthName(info.month) + '.';
+        text = esc(text);
+      } else if (info.mode === 'datum') {
+        var days = info.days;
+        text = days > 0 ? 'Nog <strong>' + days + '</strong> ' + (days === 1 ? 'dag' : 'dagen') + ' tot je examen.'
+          : days === 0 ? '<strong>Vandaag is je examen. Succes!</strong>'
+          : esc('Je examen was op ' + U.dayLabel(info.day) + '. Heb je een nieuwe datum? Vul die hier in.');
+      } else if (info.mode === 'maand') {
+        var name = U.monthName(info.month);
+        if (info.phase === 'voorbij') {
+          text = esc(name.charAt(0).toUpperCase() + name.slice(1) + ' is voorbij. Kies een nieuwe maand of een precieze datum.');
+        } else if (info.phase === 'bezig') {
+          text = esc('Examen in ' + name + ' (schatting) · het kan nu elke dag zijn');
+          tip = promptButton('Heb je al een datum? ', 'Vul die in', ' voor een beter plan.');
+        } else {
+          text = esc('Examen in ' + name + ' (schatting) · plan rekent met 1 ' + name);
+          if (info.phase === 'bijna') tip = promptButton('Al geboekt? ', 'Vul je examendatum in', ' voor een beter plan.');
+        }
+      } else {
+        text = 'Weet je ongeveer wanneer? Kies dan een maand.';
+      }
+      if (status.innerHTML !== text) status.innerHTML = text;
+      hint.hidden = !tip;
+      hint.innerHTML = tip;
+    }
+
+    kindSel.onchange = function () {
+      var st = store.state();
+      var v = kindSel.value;
+      typedPast = false;
+      precise = v === 'datum';
+      if (v === 'geen') store.setExamMonth(null);
+      else if (v === 'maand') {
+        // Voorkeuze: de maand van een opgeslagen datum als die in de lijst staat, anders volgende maand.
+        var from = st.examDate && st.examDate.slice(0, 7);
+        store.setExamMonth(from && U.monthList(Date.now(), 12).indexOf(from) >= 0 ? from : U.monthKey(Date.now(), 1));
+      }
+      update(); // de focus blijft op deze keuzelijst
+    };
+    hint.onclick = function (e) {
+      if (!e.target.closest('[data-act=precies]')) return;
+      precise = true;
+      typedPast = false;
+      update();
+      slot.querySelector('input').focus();
+    };
+    update();
+  }
+
   function tile(href, title, big, small) {
     return '<a class="tegel" href="' + href + '"><h2>' + esc(title) + '</h2><p class="groot">' + esc(big) + '</p><p class="klein">' + esc(small) + '</p></a>';
   }
@@ -438,7 +557,7 @@
           if (ok) knew++;
           store.reviewCard(item.id, ok);
           // Jezelf eerlijk beoordelen is geen fout: alleen de statistiek, niet het foutenlogboek.
-          store.recordStat(ok);
+          store.recordStat(ok, item.id);
           i++;
           show();
         }
@@ -538,7 +657,7 @@
     main.innerHTML = '<section class="kaart"><h1>Proefexamen</h1>' +
       '<p>Zoals het echte CBR-examen: <strong>' + EXAM.n + ' vragen</strong> door elkaar, <strong>' + EXAM.minutes + ' minuten</strong>, en je hebt er <strong>' + EXAM.pass + '</strong> goed nodig. ' +
       'Je ziet pas aan het eind wat je goed en fout had. Vragen die je niet op tijd beantwoordt, tellen als fout.</p>' +
-      '<p class="noot">In het echte examen zitten ook gevaarherkenning-filmpjes en vragen met foto\'s. Die kan deze app nog niet, dus een voldoende hier is een goed teken, maar geen garantie.</p>' +
+      '<p class="noot">In het echte examen zitten ook gevaarherkenning en vragen met foto\'s. Die zitten niet in dit proefexamen, dus een voldoende hier is geen garantie.</p>' +
       '<div class="rij"><button class="knop" data-act="start">Start proefexamen</button></div></section>' +
       (exams.length ? '<section class="kaart"><h2>Eerdere proefexamens</h2><table class="tabel"><thead><tr><th>Datum</th><th>Score</th><th>Uitslag</th></tr></thead><tbody>' +
         exams.slice().reverse().slice(0, 10).map(function (e) {
@@ -603,13 +722,16 @@
       });
       var score = answers.filter(function (a) { return a.ok; }).length;
       var passed = score >= EXAM.pass;
-      store.addExam({ date: Date.now(), score: score, total: list.length, passed: passed, timeUp: timeUp });
+      // Score per onderwerp; open vragen bij tijd-om tellen als fout, zodat het optelt tot de score.
+      var topics = U.tallyTopics(list.map(function (item, k) { return { topic: item.topic, ok: k < answers.length && answers[k].ok }; }));
+      store.addExam({ date: Date.now(), score: score, total: list.length, passed: passed, timeUp: timeUp, topics: topics });
       var mins = Math.round((Date.now() - started) / 60000);
       var wrong = answers.filter(function (a) { return !a.ok; });
       var skipped = list.length - answers.length;
-      main.innerHTML = '<section class="kaart"><h1>Uitslag: ' + (passed ? '<span class="status goed">Geslaagd</span>' : '<span class="status fout">Gezakt</span>') + '</h1>' +
+      main.innerHTML = '<section class="kaart"><h1 tabindex="-1">Uitslag: ' + (passed ? '<span class="status goed">Geslaagd</span>' : '<span class="status fout">Gezakt</span>') + '</h1>' +
         '<p class="score">' + score + ' / ' + list.length + ' goed</p>' +
         '<p>' + (passed ? 'Je had er ' + EXAM.pass + ' nodig. Goed bezig!' : 'Je had er ' + EXAM.pass + ' nodig, dus nog ' + (EXAM.pass - score) + ' meer. Kijk je fouten na en probeer het nog eens.') + '</p>' +
+        '<p class="noot">Gevaarherkenning en vragen met foto\'s zitten niet in dit proefexamen. Een voldoende hier is dus geen garantie voor het echte examen.</p>' +
         (timeUp ? '<p class="fout-tekst">De tijd was om. ' + skipped + ' ' + (skipped === 1 ? 'vraag telt' : 'vragen tellen') + ' als fout.</p>' : '<p class="klein">Tijd: ongeveer ' + mins + ' van de ' + EXAM.minutes + ' minuten.</p>') +
         (wrong.length ? '<h2>Nakijken</h2><ol class="nakijk">' + wrong.map(function (a) {
           return '<li><p><strong>' + esc(itemLabel(a.item)) + '</strong></p>' +
@@ -620,6 +742,7 @@
         '<div class="rij"><button class="knop" data-act="opnieuw">Nieuw proefexamen</button><a class="knop secundair" href="#/fouten">Naar foutenlogboek</a></div></section>';
       main.querySelector('[data-act=opnieuw]').onclick = runExam;
       window.scrollTo(0, 0);
+      main.querySelector('h1').focus();
     }
     timer = setInterval(clock, 1000);
     next();
@@ -649,7 +772,7 @@
         '<div class="rij"><a class="knop" href="#/start">Begin met oefenen</a></div></section>';
       return;
     }
-    var recent = openIds.slice().sort(function (a, b) { return st.mistakes[b].last - st.mistakes[a].last; });
+    var recent = openIds.slice().sort(function (a, b) { return (Number(st.mistakes[b].last) || 0) - (Number(st.mistakes[a].last) || 0); });
 
     main.innerHTML = '<section class="kaart"><h1>Foutenlogboek</h1>' +
       '<p>' + openIds.length + ' open ' + (openIds.length === 1 ? 'fout' : 'fouten') + '. Een fout is opgelost als je die vraag daarna goed hebt op <strong>twee verschillende dagen</strong>. Zo weet je zeker dat je het onthoudt.</p>' +
