@@ -17,6 +17,9 @@
 
   function fmtNum(n) { return String(n).replace('.', ','); }
 
+  function hasKey(obj, k) { return obj != null && Object.prototype.hasOwnProperty.call(obj, k); }
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+
   // Begin van de lokale dag (tijdstip in ms).
   function dayStart(t) {
     var d = new Date(t == null ? Date.now() : t);
@@ -45,11 +48,15 @@
   // Is s een maand als "2026-11"?
   function isMonth(s) { return typeof s === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s); }
 
-  // Kalenderdagen van vandaag (t) tot een dag "2026-11-20"; negatief als die dag voorbij is.
-  function daysUntil(day, t) {
+  // Begin van een lokale dag "2026-09-30" als tijdstip.
+  function dayTime(day) {
     var p = day.split('-');
-    return Math.round((new Date(+p[0], p[1] - 1, +p[2]).getTime() - dayStart(t)) / 86400000);
+    return new Date(+p[0], p[1] - 1, +p[2]).getTime();
   }
+  // Kalenderdagen van vandaag (t) tot een dag "2026-11-20"; negatief als die dag voorbij is.
+  function daysUntil(day, t) { return Math.round((dayTime(day) - dayStart(t)) / 86400000); }
+  // Kalenderdagen van dag a tot dag b: ("2026-09-27", "2026-10-01") -> 4. Ook rond zomer-/wintertijd.
+  function dayDiff(a, b) { return daysUntil(b, dayTime(a)); }
 
   // Maand van tijdstip t plus n maanden, als "2026-11".
   function monthKey(t, n) {
@@ -91,7 +98,7 @@
   function tallyTopics(rows) {
     var out = {};
     rows.forEach(function (r) {
-      if (!Object.prototype.hasOwnProperty.call(out, r.topic)) out[r.topic] = [0, 0];
+      if (!hasKey(out, r.topic)) out[r.topic] = [0, 0];
       out[r.topic][1]++;
       if (r.ok) out[r.topic][0]++;
     });
@@ -133,14 +140,13 @@
     var topic = {}, inTopics = {}, picked = {};
     (o.topics || []).forEach(function (t) { inTopics[t] = true; });
     o.items.forEach(function (x) { topic[x.id] = x.topic; });
-    var hasOwn = function (obj, k) { return !!obj && Object.prototype.hasOwnProperty.call(obj, k); };
     var out = (o.open || []).filter(function (id) {
-      return hasOwn(topic, id) && inTopics[topic[id]] === true && !picked[id] && (picked[id] = true);
+      return hasKey(topic, id) && inTopics[topic[id]] === true && !picked[id] && (picked[id] = true);
     });
     var rest = o.items.filter(function (x) {
-      return inTopics[x.topic] === true && !picked[x.id] && !hasOwn(o.okIds, x.id);
+      return inTopics[x.topic] === true && !picked[x.id] && !hasKey(o.okIds, x.id);
     });
-    var inExam = function (x) { return hasOwn(o.examIds, x.id); };
+    var inExam = function (x) { return hasKey(o.examIds, x.id); };
     var ids = function (x) { return x.id; };
     return out.concat(rest.filter(inExam).map(ids), rest.filter(function (x) { return !inExam(x); }).map(ids)).slice(0, o.max || 15);
   }
@@ -166,16 +172,9 @@
   // Alles hieronder krijgt de opgeslagen toestand (store.state()), de vragenbank [{ id, topic, kind }]
   // en het tijdstip "nu" mee, en geeft gewone gegevens terug. Geen DOM, zodat het met node te testen is.
 
-  function hasKey(obj, k) { return obj != null && Object.prototype.hasOwnProperty.call(obj, k); }
-  function isNum(v) { return typeof v === 'number' && isFinite(v); }
-
-  // Begin van een lokale dag "2026-09-30" als tijdstip.
-  function dayTime(day) {
-    var p = day.split('-');
-    return new Date(+p[0], p[1] - 1, +p[2]).getTime();
-  }
-  // Kalenderdagen van dag a tot dag b: ("2026-09-27", "2026-10-01") -> 4. Ook rond zomer-/wintertijd.
-  function dayDiff(a, b) { return Math.round((dayTime(b) - dayTime(a)) / 86400000); }
+  // `last` van een fout als getal; zonder `last` telt hij als oudste.
+  function lastOf(mistakes, id) { return isNum(mistakes[id].last) ? mistakes[id].last : -Infinity; }
+  function cmp(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
 
   // Heb je dit item ooit gezien? "seen" bestaat sinds deel 1; een flashcard of fout van daarvoor telt ook.
   function wasSeen(state, id) {
@@ -193,12 +192,10 @@
   }
 
   // Open fouten ordenen (AC-21): eerst die met streak 1 van een eerdere dag, dan de oudste `last` eerst.
-  // Een fout zonder `last` telt als oudste.
   function orderMistakes(mistakes, ids, today) {
     var early = function (id) { var m = mistakes[id]; return m.streak === 1 && isDay(m.okDay) && m.okDay < today ? 0 : 1; };
-    var last = function (id) { return isNum(mistakes[id].last) ? mistakes[id].last : -Infinity; };
     return ids.slice().sort(function (a, b) {
-      return early(a) - early(b) || (last(a) - last(b)) || (a < b ? -1 : a > b ? 1 : 0);
+      return early(a) - early(b) || (lastOf(mistakes, a) - lastOf(mistakes, b)) || cmp(a, b);
     });
   }
   // Id's van open fouten die nog in de bank staan (known: { id: item }).
@@ -305,7 +302,7 @@
     var mock = mockDue(rules, state.exams, today);
     var last = lastActivity(state);
     return {
-      today: today, info: info, rules: rules, unseen: unseen.length,
+      today: today, rules: rules, unseen: unseen.length,
       mistakes: mistakes, due: due, fresh: fresh, weak: weak, order: order, total: order.length,
       mock: mock, nulmeting: mock && !(state.exams || []).length,
       target: mock ? Math.ceil(order.length / 2) : order.length,
@@ -383,7 +380,6 @@
   // Alleen onderwerpen met items in de bank tellen; alleen proefexamens van 50 vragen tellen voor eis 1.
   function readiness(state, bank, now, name) {
     var nm = name || String;
-    var today = dayKey(now);
     var known = index(bank);
     var topics = [];
     bank.forEach(function (x) { if (topics.indexOf(x.topic) < 0) topics.push(x.topic); });
@@ -394,7 +390,7 @@
     var run = 0;
     for (var i = exams.length - 1; i >= 0 && run < 3 && Number(exams[i].score) >= GOAL; i--) run++;
     var lowest = last3.length ? Math.min.apply(null, last3) : null;
-    var e1 = { met: run >= 3, done: last3.length, scores: last3, lowest: lowest, missing: 3 - run };
+    var e1 = { met: run >= 3, missing: 3 - run };
     e1.text = last3.length < 3
       ? last3.length + ' van 3 gedaan' + (last3.length ? ', laagste ' + lowest : '')
       : 'Laatste 3: ' + last3.join(', ') + (e1.met ? '' : ' (laagste ' + lowest + ')');
@@ -415,16 +411,16 @@
     });
     var unmet = rows.filter(function (r) { return !r.met; });
     var e2 = {
-      met: !unmet.length, rows: rows, unmet: unmet.length, total: rows.length,
+      met: !unmet.length, rows: rows, total: rows.length,
       text: unmet.length ? (rows.length - unmet.length) + ' van ' + rows.length + ' onderwerpen gehaald' : 'Alle ' + rows.length + ' onderwerpen 90% of meer'
     };
 
     // Eis 3: geen open fouten van vóór eergisteren (zonder `last`: telt als oud).
     var cutoff = dayKey(addDays(now, -2));
     var open = openIds(state, known);
-    var lastOf = function (id) { var l = state.mistakes[id].last; return isNum(l) ? l : -Infinity; };
-    var old = open.filter(function (id) { return lastOf(id) === -Infinity || dayKey(lastOf(id)) < cutoff; })
-      .sort(function (a, b) { return (lastOf(a) - lastOf(b)) || (a < b ? -1 : a > b ? 1 : 0); });
+    var last = function (id) { return lastOf(state.mistakes, id); };
+    var old = open.filter(function (id) { return last(id) === -Infinity || dayKey(last(id)) < cutoff; })
+      .sort(function (a, b) { return (last(a) - last(b)) || cmp(a, b); });
     var e3 = {
       met: !old.length, cutoff: cutoff, ids: old, open: open.length,
       text: !open.length ? 'Geen open fouten'
@@ -446,7 +442,7 @@
       headline = 'Bijna: ' + headline;
     }
     var seen = bank.filter(function (x) { return wasSeen(state, x.id); }).length;
-    return { today: today, noData: noData, status: status, headline: headline, eis1: e1, eis2: e2, eis3: e3, seen: seen, total: bank.length };
+    return { noData: noData, status: status, headline: headline, eis1: e1, eis2: e2, eis3: e3, seen: seen, total: bank.length };
   }
 
   RB.util = {

@@ -290,11 +290,11 @@
 
   // ---------- Vandaag: het plan uit de examendatum (U.dayPlan) ----------
   function planNow() { return U.dayPlan(store.state(), shuffle(all()), Date.now()); }
-  // Het doel van vandaag ligt vast vanaf het eerste moment van de dag (AC-28).
-  function ensureToday() {
+  // Het doel van vandaag ligt vast vanaf het eerste moment van de dag (AC-28). plan: als je het al hebt.
+  function ensureToday(plan) {
     var td = store.today();
     if (td) return td;
-    var plan = planNow();
+    plan = plan || planNow();
     return store.setToday(plan.target, plan.mock);
   }
   // Na een nieuwe examendatum: doel en ritme opnieuw; wat al gedaan is, telt mee in het nieuwe doel (AC-28).
@@ -305,8 +305,8 @@
   // Vragen voor een ronde "Vandaag": wat er nog over is van het doel, in planvolgorde.
   // Doel al gehaald ("Nog een ronde"): de volgende 15 uit het plan, of anders de langst niet geziene.
   function todayList() {
-    var td = ensureToday();
     var plan = planNow();
+    var td = ensureToday(plan);
     var left = Math.max(0, Number(td.target) - Number(td.practised));
     var ids = plan.order.slice(0, left || 15);
     if (!ids.length) ids = U.freshFirst(store.state(), shuffle(all())).slice(0, 15).map(function (x) { return x.id; });
@@ -366,8 +366,8 @@
   // De Vandaag-kaart: doelregel, wat er in het plan zit, uitleg en knoppen.
   function renderToday(box) {
     var st = store.state();
-    var td = ensureToday();
     var plan = planNow();
+    var td = ensureToday(plan);
     var target = Number(td.target) || 0;
     var done = Number(td.practised) || 0;
     var mockDone = st.exams.some(function (e) { return U.dayKey(Number(e.date)) === plan.today; });
@@ -410,10 +410,10 @@
     var r = U.readiness(store.state(), all(), Date.now(), topicName);
     var act = !r.noData; // zonder gegevens geen knoppen per eis
     var status = function (met) { return met ? '<span class="status goed">Gehaald</span>' : '<span class="status">Nog niet</span>'; };
-    var row = function (t, withBtn) {
-      return '<li class="onderwerp-rij"><strong>' + esc(t.name) + '</strong>' + (t.met ? ' <span class="status goed">Gehaald</span>' : '') +
+    var row = function (t) {
+      return '<li class="onderwerp-rij"><strong>' + esc(t.name) + '</strong>' + (t.met ? ' ' + status(true) : '') +
         '<div class="klein">' + esc(t.text) + '</div>' +
-        (withBtn && act && !t.met ? '<button type="button" class="knop klein secundair" data-act="onderwerp" data-topic="' + esc(t.topic) + '">Oefen ' + esc(t.name) + '</button>' : '') + '</li>';
+        (act && !t.met ? '<button type="button" class="knop klein secundair" data-act="onderwerp" data-topic="' + esc(t.topic) + '">Oefen ' + esc(t.name) + '</button>' : '') + '</li>';
     };
     var e1 = r.eis1, e2 = r.eis2, e3 = r.eis3;
     var unmet = e2.rows.filter(function (t) { return !t.met; });
@@ -430,9 +430,9 @@
       '<li class="eis"><h3>Onderwerpen ' + status(e2.met) + '</h3>' +
         '<p class="klein">Elk onderwerp 90% of meer goed over de laatste 20 antwoorden</p>' +
         '<p>' + esc(e2.text) + '</p>' +
-        (unmet.length ? '<ul class="onderwerpen-lijst">' + unmet.slice(0, 3).map(function (t) { return row(t, true); }).join('') + '</ul>' : '') +
+        (unmet.length ? '<ul class="onderwerpen-lijst">' + unmet.slice(0, 3).map(row).join('') + '</ul>' : '') +
         '<details><summary>Alle onderwerpen (' + e2.total + ')</summary><ul class="onderwerpen-lijst">' +
-        e2.rows.map(function (t) { return row(t, true); }).join('') + '</ul></details></li>' +
+        e2.rows.map(row).join('') + '</ul></details></li>' +
       '<li class="eis"><h3>Oude fouten ' + status(e3.met) + '</h3>' +
         '<p class="klein">Geen open fouten ouder dan 2 dagen</p>' +
         '<p>' + esc(e3.text) + '</p>' +
@@ -450,31 +450,24 @@
         kop.scrollIntoView({ block: 'start' });
         kop.focus();
       } else if (a === 'onderwerp') {
-        practiseTopic(t.getAttribute('data-topic'));
+        // "Oefen <onderwerp>": max. 15, fouten eerst, dan nooit of lang niet gezien.
+        var topic = t.getAttribute('data-topic');
+        practise(topicName(topic), function () { return U.topicPractice(store.state(), shuffle(all()), topic, Date.now(), 15); });
       } else if (a === 'oude-fouten') {
-        practiseOld();
+        // Alle open fouten van vóór eergisteren, oudste eerst.
+        practise('Oude fouten', function () { return U.readiness(store.state(), all(), Date.now(), topicName).eis3.ids; }, {
+          note: 'Wat je vandaag goed had, komt morgen nog één keer terug. Is het dan weer goed, dan is de fout opgelost. Vandaag vaker oefenen mag, maar telt niet extra.'
+        });
       }
     };
   }
-  // "Oefen <onderwerp>" uit de examencheck: max. 15, fouten eerst, dan nooit of lang niet gezien.
-  function practiseTopic(topic) {
-    var start = function () {
-      var ids = U.topicPractice(store.state(), shuffle(all()), topic, Date.now(), 15);
+  // Sessie uit de examencheck; elke ronde een nieuwe lijst. Niets meer te oefenen: terug naar de start.
+  function practise(title, makeIds, opts) {
+    (function start() {
+      var ids = makeIds();
       if (!ids.length) { go('#/start'); return; }
-      runSession(topicName(topic), ids.map(function (id) { return items[id]; }), start);
-    };
-    start();
-  }
-  // "Oefen oude fouten": alle open fouten van vóór eergisteren, oudste eerst.
-  function practiseOld() {
-    var start = function () {
-      var ids = U.readiness(store.state(), all(), Date.now(), topicName).eis3.ids;
-      if (!ids.length) { go('#/start'); return; }
-      runSession('Oude fouten', ids.map(function (id) { return items[id]; }), start, {
-        note: 'Wat je vandaag goed had, komt morgen nog één keer terug. Is het dan weer goed, dan is de fout opgelost. Vandaag vaker oefenen mag, maar telt niet extra.'
-      });
-    };
-    start();
+      runSession(title, ids.map(function (id) { return items[id]; }), start, opts);
+    })();
   }
 
   // Examendatum op de startpagina: "Nog niet gepland", een maand (schatting) of een precieze datum.
