@@ -98,9 +98,80 @@
     return out;
   }
 
+  // Rijen voor de uitslag per onderwerp: { voorrang: [goed, gevraagd] } -> [{ topic, name, ok, asked, wrong }].
+  // Meeste fout eerst; bij gelijk: meer gevraagd eerst, dan de naam. name(t) geeft de naam van een onderwerp.
+  function topicRows(topics, name) {
+    var nm = name || String;
+    return Object.keys(topics || {}).map(function (t) {
+      var v = topics[t];
+      return { topic: t, name: String(nm(t)), ok: Number(v[0]), asked: Number(v[1]), wrong: Number(v[1]) - Number(v[0]) };
+    }).sort(function (a, b) {
+      return b.wrong - a.wrong || b.asked - a.asked || a.name.localeCompare(b.name, 'nl');
+    });
+  }
+  // De (hoogstens 3) onderwerpen met de meeste fouten, in de volgorde van topicRows.
+  function weakTopics(rows) {
+    return rows.filter(function (r) { return r.wrong > 0; }).slice(0, 3).map(function (r) { return r.topic; });
+  }
+
+  // Verschil met het vorige proefexamen, of null als dat niets zegt
+  // (geen vorig examen, oud formaat, of een ander aantal vragen).
+  function changeLine(prev, cur) {
+    if (!prev || prev.total == null || cur.total == null || Number(prev.total) !== Number(cur.total)) return null;
+    var p = Number(prev.score) + ' / ' + Number(prev.total);
+    var d = Number(cur.score) - Number(prev.score);
+    if (!d) return 'Zelfde score als vorige: ' + p;
+    return (d > 0 ? '+' : '') + d + ' sinds vorige: ' + p;
+  }
+
+  // Vragen voor "Oefen zwakke onderwerpen" (hoogstens max, standaard 15), als lijst met id's.
+  // o.topics: de zwakke onderwerpen. o.items: alle items [{ id, topic }] (al gehusseld).
+  // o.open: id's van open fouten (in de gewenste volgorde). o.okIds: { id: true } goed in dit examen.
+  // o.examIds: { id: true } in dit examen; die (niet goed beantwoord) komen na de fouten eerst.
+  // Volgorde: eerst de open fouten uit die onderwerpen, dan andere vragen daaruit die niet goed waren in het examen.
+  function weakList(o) {
+    var max = o.max || 15;
+    var topic = {};
+    var inTopics = {};
+    (o.topics || []).forEach(function (t) { inTopics[t] = true; });
+    o.items.forEach(function (x) { topic[x.id] = x.topic; });
+    var hasOwn = function (obj, k) { return !!obj && Object.prototype.hasOwnProperty.call(obj, k); };
+    var picked = {};
+    var out = [];
+    (o.open || []).forEach(function (id) {
+      if (hasOwn(topic, id) && inTopics[topic[id]] === true && !picked[id]) { picked[id] = true; out.push(id); }
+    });
+    var rest = o.items.filter(function (x) {
+      return inTopics[x.topic] === true && !picked[x.id] && !hasOwn(o.okIds, x.id);
+    });
+    var fromExam = rest.filter(function (x) { return hasOwn(o.examIds, x.id); });
+    var other = rest.filter(function (x) { return !hasOwn(o.examIds, x.id); });
+    fromExam.concat(other).forEach(function (x) { out.push(x.id); });
+    return out.slice(0, max);
+  }
+
+  // "Voorrang", "Voorrang en Snelheid", "Borden, Voorrang en Snelheid".
+  function joinNames(names) {
+    if (names.length < 2) return names.join('');
+    return names.slice(0, -1).join(', ') + ' en ' + names[names.length - 1];
+  }
+
+  // Regel in het foutenlogboek: hoeveel van de n open fouten had je vandaag al goed (t).
+  function okTodayLine(t, n) {
+    if (!t) return '';
+    if (t === n) {
+      return n === 1 ? 'Die had je vandaag al goed. Hij is pas weg als je hem morgen weer goed hebt.'
+        : 'Die had je vandaag allemaal al goed. Ze zijn pas weg als je ze morgen weer goed hebt.';
+    }
+    return t === 1 ? '1 daarvan had je vandaag al goed. Die is pas weg als je hem morgen weer goed hebt.'
+      : t + ' daarvan had je vandaag al goed. Die zijn pas weg als je ze morgen weer goed hebt.';
+  }
+
   RB.util = {
     parseNum: parseNum, fmtNum: fmtNum, dayStart: dayStart, dayKey: dayKey, addDays: addDays,
     isDay: isDay, isMonth: isMonth, daysUntil: daysUntil, monthKey: monthKey, monthList: monthList,
-    monthName: monthName, monthLabel: monthLabel, dayLabel: dayLabel, examInfo: examInfo, tallyTopics: tallyTopics
+    monthName: monthName, monthLabel: monthLabel, dayLabel: dayLabel, examInfo: examInfo, tallyTopics: tallyTopics,
+    topicRows: topicRows, weakTopics: weakTopics, changeLine: changeLine, weakList: weakList,
+    joinNames: joinNames, okTodayLine: okTodayLine
   };
 })();

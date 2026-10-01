@@ -246,8 +246,11 @@
     var i = 0, score = 0, wrong = [];
     function next() {
       if (i >= list.length) return summary();
-      main.innerHTML = '<section class="kaart"><div class="kop"><h1>' + esc(title) + '</h1><span class="teller">' + (i + 1) + ' / ' + list.length + '</span></div>' +
+      main.innerHTML = '<section class="kaart"><div class="kop"><h1 tabindex="-1">' + esc(title) + '</h1><span class="teller">' + (i + 1) + ' / ' + list.length + '</span></div>' +
         '<div class="voortgang"><div style="width:' + pct(i, list.length) + '%"></div></div><div class="q"></div></section>';
+      // Bij de eerste vraag de focus op de titel: de knop waarmee je startte bestaat niet meer.
+      // (Een invulvraag zet daarna de focus in het invulveld.)
+      if (i === 0) main.querySelector('h1').focus();
       var item = list[i];
       renderQuestion(main.querySelector('.q'), item, {
         reverse: opts.reverse,
@@ -734,23 +737,66 @@
       var passed = score >= EXAM.pass;
       // Score per onderwerp; open vragen bij tijd-om tellen als fout, zodat het optelt tot de score.
       var topics = U.tallyTopics(list.map(function (item, k) { return { topic: item.topic, ok: k < answers.length && answers[k].ok }; }));
-      store.addExam({ date: Date.now(), score: score, total: list.length, passed: passed, timeUp: timeUp, topics: topics });
+      var exams = store.state().exams;
+      var prev = exams[exams.length - 1];
+      var cur = { date: Date.now(), score: score, total: list.length, passed: passed, timeUp: timeUp, topics: topics };
+      store.addExam(cur);
+      var change = U.changeLine(prev, cur);
       var mins = Math.round((Date.now() - started) / 60000);
       var wrong = answers.filter(function (a) { return !a.ok; });
       var skipped = list.length - answers.length;
+
+      // Per onderwerp (open vragen bij tijd-om tellen als fout) en de zwakke onderwerpen.
+      var rows = U.topicRows(topics, topicName);
+      var weak = U.weakTopics(rows);
+      var okIds = {}, examIds = {};
+      list.forEach(function (item, k) { examIds[item.id] = true; if (k < answers.length && answers[k].ok) okIds[item.id] = true; });
+      var weakIds = function () {
+        return U.weakList({ topics: weak, items: shuffle(all()), open: store.openMistakes(known).sort(newestMistake), okIds: okIds, examIds: examIds });
+      };
+      var weakCount = weak.length ? weakIds().length : 0;
+      var weakBtn = weakCount ? '<button class="knop" data-act="zwak">Oefen zwakke onderwerpen (' + weakCount + ')</button>' : '';
+      var weakNames = weak.map(topicName);
+
       main.innerHTML = '<section class="kaart"><h1 tabindex="-1">Uitslag: ' + (passed ? '<span class="status goed">Geslaagd</span>' : '<span class="status fout">Gezakt</span>') + '</h1>' +
         '<p class="score">' + score + ' / ' + list.length + ' goed</p>' +
+        (change ? '<p class="verschil">' + esc(change) + '</p>' : '') +
         '<p>' + (passed ? 'Je had er ' + EXAM.pass + ' nodig. Goed bezig!' : 'Je had er ' + EXAM.pass + ' nodig, dus nog ' + (EXAM.pass - score) + ' meer. Kijk je fouten na en probeer het nog eens.') + '</p>' +
         '<p class="noot">Gevaarherkenning en vragen met foto\'s zitten niet in dit proefexamen. Een voldoende hier is dus geen garantie voor het echte examen.</p>' +
         (timeUp ? '<p class="fout-tekst">De tijd was om. ' + skipped + ' ' + (skipped === 1 ? 'vraag telt' : 'vragen tellen') + ' als fout.</p>' : '<p class="klein">Tijd: ongeveer ' + mins + ' van de ' + EXAM.minutes + ' minuten.</p>') +
+        (weakCount ? '<p class="zwak-regel">' + esc('Je fouten zaten ' + (rows.filter(function (r) { return r.wrong > 0; }).length > 3 ? 'vooral ' : '') + 'bij ' + U.joinNames(weakNames) + '.') + '</p>' +
+          '<div class="rij">' + weakBtn + '</div>' +
+          '<p class="klein">Kijk eerst je fouten na (hieronder). Deze uitslag kun je later niet meer openen.</p>' : '') +
+        '</section>' +
+        '<section class="kaart"><h2 id="per-onderwerp">Per onderwerp</h2>' +
+        '<table class="tabel onderwerpen" aria-labelledby="per-onderwerp"><thead><tr><th scope="col">Onderwerp</th><th scope="col" class="num">Goed</th><th scope="col" class="num">Fout</th></tr></thead><tbody>' +
+        rows.map(function (r) {
+          return '<tr><td>' + esc(r.name) + '</td><td class="num">' + r.ok + ' van ' + r.asked + '</td><td class="num">' + (r.wrong ? '<strong>' + r.wrong + '</strong>' : '0') + '</td></tr>';
+        }).join('') + '</tbody></table>' +
+        (timeUp ? '<p class="klein">Vragen die je niet op tijd hebt beantwoord, tellen hier als fout.</p>' : '') +
+        '</section>' +
+        '<section class="kaart">' +
         (wrong.length ? '<h2>Nakijken</h2><ol class="nakijk">' + wrong.map(function (a) {
           return '<li><p><strong>' + esc(itemLabel(a.item)) + '</strong></p>' +
             (a.item.kind === 'voorrang' ? '<div class="kruispunt-wrap klein-kruispunt">' + RB.renderIntersection(a.item.scenario, a.item.scenario.order, { still: true }) + '</div>' : '') +
             '<p>Jouw antwoord: <span class="fout-tekst">' + esc(a.given) + '</span><br>Juist: <span class="goed-tekst">' + esc(correctText(a.item)) + '</span></p>' +
             '<p class="klein">' + esc(explainText(a.item)) + '</p></li>';
-        }).join('') + '</ol>' : '<p>Alles goed!</p>') +
-        '<div class="rij"><button class="knop" data-act="opnieuw">Nieuw proefexamen</button><a class="knop secundair" href="#/fouten">Naar foutenlogboek</a></div></section>';
+        }).join('') + '</ol>'
+          : skipped ? '<p>Je hebt geen vragen fout beantwoord, maar niet alle vragen op tijd gedaan.</p>' : '<p>Alles goed!</p>') +
+        '<div class="rij">' + (weakCount
+          ? weakBtn + '<a class="knop secundair" href="#/fouten">Naar foutenlogboek</a><button class="knop secundair" data-act="opnieuw">Nieuw proefexamen</button>'
+          : '<button class="knop" data-act="opnieuw">Nieuw proefexamen</button><a class="knop secundair" href="#/fouten">Naar foutenlogboek</a>') +
+        '</div></section>';
       main.querySelector('[data-act=opnieuw]').onclick = runExam;
+      // Oefen zwakke onderwerpen; "Nog een ronde" maakt de lijst opnieuw met dezelfde onderwerpen en regel.
+      var startWeak = function () {
+        var ids = weakIds();
+        if (!ids.length) { go('#/start'); return; }
+        runSession('Zwakke onderwerpen', ids.map(function (id) { return items[id]; }), startWeak, {
+          note: 'Fouten die je nu goed had, komen morgen nog één keer terug. Is het dan weer goed, dan is de fout opgelost.'
+        });
+      };
+      main.querySelectorAll('[data-act=zwak]').forEach(function (b) { b.onclick = startWeak; });
       window.scrollTo(0, 0);
       main.querySelector('h1').focus();
     }
@@ -763,8 +809,8 @@
     var st = store.state();
     var ids = Object.keys(st.mistakes).filter(known);
     var openIds = ids.filter(function (id) { return !st.mistakes[id].resolved; });
-    var ready = openIds.filter(function (id) { return !store.okToday(id); });
-    var tomorrow = openIds.length - ready.length;
+    // Ook fouten die je vandaag al goed had, mag je vandaag weer oefenen (opgelost pas morgen).
+    var okToday = openIds.filter(function (id) { return store.okToday(id); }).length;
     var byTopic = {};
     ids.forEach(function (id) {
       var m = st.mistakes[id];
@@ -772,7 +818,7 @@
       byTopic[t] = byTopic[t] || { open: 0, total: 0, ids: [] };
       byTopic[t].total += m.count;
       if (!m.resolved) byTopic[t].open++;
-      if (!m.resolved && !store.okToday(id)) byTopic[t].ids.push(id);
+      if (!m.resolved) byTopic[t].ids.push(id);
     });
     var topics = Object.keys(byTopic).sort(function (a, b) { return byTopic[b].total - byTopic[a].total; });
     var max = topics.length ? byTopic[topics[0]].total : 1;
@@ -786,8 +832,8 @@
 
     main.innerHTML = '<section class="kaart"><h1>Foutenlogboek</h1>' +
       '<p>' + openIds.length + ' open ' + (openIds.length === 1 ? 'fout' : 'fouten') + '. Een fout is opgelost als je die vraag daarna goed hebt op <strong>twee verschillende dagen</strong>. Zo weet je zeker dat je het onthoudt.</p>' +
-      (tomorrow ? '<p class="klein">' + tomorrow + ' ' + (tomorrow === 1 ? 'fout had' : 'fouten had') + ' je vandaag al goed. Die komen morgen terug.</p>' : '') +
-      '<div class="rij"><button class="knop" data-act="oefen"' + (ready.length ? '' : ' disabled') + '>Oefen mijn fouten (' + ready.length + ')</button></div></section>' +
+      (okToday ? '<p class="klein">' + esc(U.okTodayLine(okToday, openIds.length)) + '</p>' : '') +
+      '<div class="rij"><button class="knop" data-act="oefen"' + (openIds.length ? '' : ' disabled') + '>Oefen mijn fouten (' + openIds.length + ')</button></div></section>' +
       '<section class="kaart"><h2>Per onderwerp</h2><div class="balken">' + topics.map(function (t) {
         var b = byTopic[t];
         return '<div class="balk-rij"><span class="naam">' + esc(topicName(t)) + '</span>' +
@@ -798,22 +844,23 @@
       (recent.length ? '<section class="kaart"><h2>Open fouten</h2><ul class="fouten-lijst">' + recent.map(function (id) {
         var m = st.mistakes[id];
         return '<li><strong>' + esc(itemLabel(items[id])) + '</strong><span class="klein">' + Number(m.count) + '× fout · ' + esc(topicName(items[id].topic)) +
-          (m.given ? ' · laatste antwoord: ' + esc(m.given) : '') + (store.okToday(id) ? ' · vandaag goed, morgen nog een keer' : '') + '</span></li>';
+          (m.given ? ' · laatste antwoord: ' + esc(m.given) : '') + '</span>' +
+          (store.okToday(id) ? '<span class="klein">Vandaag al goed. Morgen nog 1× goed, dan is hij weg.</span>' : '') + '</li>';
       }).join('') + '</ul></section>' : '') +
       '<section class="kaart gevaarzone"><h2>Opnieuw beginnen</h2><p class="klein">Wist al je voortgang, fouten en proefexamens op dit apparaat.</p>' +
       '<button class="knop gevaar klein" data-act="reset">Alle voortgang wissen</button></section>';
 
     var practice = function (list) {
       var start = function () {
-        var still = list.filter(function (x) { var m = store.state().mistakes[x.id]; return m && !m.resolved && !store.okToday(x.id); });
+        var still = list.filter(function (x) { var m = store.state().mistakes[x.id]; return m && !m.resolved; });
         if (!still.length) { go('#/fouten'); return; }
         runSession('Fouten oefenen', shuffle(still), start, {
-          note: 'Wat je nu goed had, komt morgen nog één keer terug. Is het dan weer goed, dan is de fout opgelost.'
+          note: 'Wat je vandaag goed had, komt morgen nog één keer terug. Is het dan weer goed, dan is de fout opgelost. Vandaag vaker oefenen mag, maar telt niet extra.'
         });
       };
       start();
     };
-    main.querySelector('[data-act=oefen]').onclick = function () { practice(ready.map(function (id) { return items[id]; })); };
+    main.querySelector('[data-act=oefen]').onclick = function () { practice(openIds.map(function (id) { return items[id]; })); };
     main.querySelectorAll('[data-topic]').forEach(function (b) {
       b.onclick = function () { practice(byTopic[b.getAttribute('data-topic')].ids.map(function (id) { return items[id]; })); };
     });

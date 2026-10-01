@@ -625,6 +625,95 @@ test('AC-35: allerlei rommel geeft geldige history, seen en examMonth', () => {
 });
 
 // DST: alle daglogica moet om de wisseling van zomer- naar wintertijd heen kloppen (Europe/Amsterdam).
+// ---------- Exam-ready loop, deel 2: uitslag per onderwerp en fouten oefenen ----------
+const NAMES = { borden: 'Borden', voorrang: 'Voorrang', kennis: 'Kennis', snelheid: 'Snelheid', alcohol: 'Alcohol' };
+const nameOf = (t) => NAMES[t] || t;
+test('AC-10: onderwerpen op meeste fout, dan meer gevraagd, dan naam', () => {
+  const { topicRows } = load().RB.util;
+  const rows = topicRows({ kennis: [18, 19], voorrang: [4, 6], borden: [5, 7] }, nameOf);
+  same(rows.map((r) => [r.name, r.ok, r.asked, r.wrong]), [['Borden', 5, 7, 2], ['Voorrang', 4, 6, 2], ['Kennis', 18, 19, 1]]);
+  const tie = topicRows({ snelheid: [2, 3], alcohol: [2, 3], kennis: [3, 3] }, nameOf);
+  same(tie.map((r) => r.topic), ['alcohol', 'snelheid', 'kennis'], 'gelijk: op naam; 0 fout achteraan');
+  same(topicRows({}, nameOf), []);
+  same(topicRows(undefined), []);
+});
+test('AC-12: zwakke onderwerpen zijn de 3 met meeste fout, alleen met fout > 0', () => {
+  const { topicRows, weakTopics } = load().RB.util;
+  const rows = topicRows({ a: [0, 3], b: [1, 3], c: [2, 3], d: [0, 5], e: [4, 4] });
+  same(weakTopics(rows), ['d', 'a', 'b']);
+  same(weakTopics(topicRows({ a: [3, 3] })), [], '0 fout: geen zwakke onderwerpen');
+  same(weakTopics(topicRows({ a: [2, 3], b: [3, 3] })), ['a']);
+});
+test('AC-11: regel met het verschil met het vorige examen', () => {
+  const { changeLine } = load().RB.util;
+  assert.strictEqual(changeLine({ score: 40, total: 50 }, { score: 43, total: 50 }), '+3 sinds vorige: 40 / 50');
+  assert.strictEqual(changeLine({ score: 45, total: 50 }, { score: 43, total: 50 }), '-2 sinds vorige: 45 / 50');
+  assert.strictEqual(changeLine({ score: 43, total: 50 }, { score: 43, total: 50 }), 'Zelfde score als vorige: 43 / 50');
+  assert.strictEqual(changeLine(undefined, { score: 43, total: 50 }), null, 'eerste examen');
+  assert.strictEqual(changeLine({ kennis: 11, inzicht: 26 }, { score: 43, total: 50 }), null, 'oud formaat');
+  assert.strictEqual(changeLine({ score: 30, total: 40 }, { score: 43, total: 50 }), null, 'ander aantal vragen');
+});
+test('AC-12: oefenlijst zwakke onderwerpen: eerst open fouten, dan niet goed in dit examen, max 15', () => {
+  const { weakList } = load().RB.util;
+  const items = [];
+  for (const t of ['a', 'b', 'c', 'd']) for (let i = 0; i < 10; i++) items.push({ id: t + i, topic: t });
+  const list = weakList({
+    topics: ['a', 'b'], items,
+    open: ['b5', 'd1', 'a3', 'onbekend', 'a3'],
+    okIds: { a0: true, a1: true, b0: true },
+    examIds: { a0: true, a1: true, b0: true, a9: true, b9: true }
+  });
+  assert.strictEqual(list.length, 15);
+  same(list.slice(0, 2), ['b5', 'a3'], 'eerst open fouten uit de zwakke onderwerpen (in volgorde, zonder dubbele)');
+  same(list.slice(2, 4), ['a9', 'b9'], 'dan vragen uit dit examen die niet goed waren');
+  assert.ok(list.every((id) => /^[ab]/.test(id)), 'alleen de zwakke onderwerpen');
+  assert.ok(!list.some((id) => ['a0', 'a1', 'b0'].includes(id)), 'niets wat goed was in dit examen');
+  assert.strictEqual(new Set(list).size, list.length, 'geen dubbele');
+  same(weakList({ topics: [], items, open: ['a3'] }), [], 'geen zwakke onderwerpen: lege lijst');
+  assert.strictEqual(weakList({ topics: ['a'], items, max: 3 }).length, 3);
+});
+test('AC-12: fouten die vandaag al goed waren zitten in de oefenlijst', () => {
+  const { RB } = load();
+  const a = { id: 'a1', topic: 'a' };
+  RB.store.recordAnswer(a, false);
+  RB.store.recordAnswer(a, true);
+  assert.ok(RB.store.okToday('a1'));
+  same(RB.util.weakList({ topics: ['a'], items: [a, { id: 'a2', topic: 'a' }], open: RB.store.openMistakes(), okIds: {} }), ['a1', 'a2']);
+});
+test('namen samenvoegen: "A", "A en B", "A, B en C"', () => {
+  const { joinNames } = load().RB.util;
+  assert.strictEqual(joinNames(['Voorrang']), 'Voorrang');
+  assert.strictEqual(joinNames(['Voorrang', 'Snelheid']), 'Voorrang en Snelheid');
+  assert.strictEqual(joinNames(['Borden', 'Voorrang', 'Snelheid']), 'Borden, Voorrang en Snelheid');
+  assert.strictEqual(joinNames([]), '');
+});
+test('AC-13: regel in het foutenlogboek over fouten die vandaag al goed waren', () => {
+  const { okTodayLine } = load().RB.util;
+  assert.strictEqual(okTodayLine(0, 4), '');
+  assert.strictEqual(okTodayLine(1, 4), '1 daarvan had je vandaag al goed. Die is pas weg als je hem morgen weer goed hebt.');
+  assert.strictEqual(okTodayLine(3, 4), '3 daarvan had je vandaag al goed. Die zijn pas weg als je ze morgen weer goed hebt.');
+  assert.strictEqual(okTodayLine(1, 1), 'Die had je vandaag al goed. Hij is pas weg als je hem morgen weer goed hebt.');
+  assert.strictEqual(okTodayLine(2, 2), 'Die had je vandaag allemaal al goed. Ze zijn pas weg als je ze morgen weer goed hebt.');
+});
+test('AC-14/15: goed vandaag blijft open; nog eens goed vandaag ook; fout zet streak 0 en okDay null', () => {
+  const { RB, clock } = load();
+  const s = RB.store;
+  s.recordAnswer(item, false);
+  s.recordAnswer(item, true);
+  s.recordAnswer(item, true);
+  const m = s.state().mistakes['k-test'];
+  assert.strictEqual(m.streak, 1);
+  assert.strictEqual(m.okDay, '2026-09-28');
+  assert.ok(!m.resolved);
+  s.recordAnswer(item, false);
+  assert.strictEqual(m.streak, 0);
+  assert.strictEqual(m.okDay, null);
+  s.recordAnswer(item, true);
+  clock.now += 24 * HOUR;
+  s.recordAnswer(item, true);
+  assert.ok(m.resolved, 'goed op een latere dag: opgelost');
+});
+
 if (process.env.TZ === 'Europe/Amsterdam') {
   test('DST: tijdzone Europe/Amsterdam is echt actief', () => {
     assert.notStrictEqual(new Date(2026, 9, 24, 12).getTimezoneOffset(), new Date(2026, 9, 26, 12).getTimezoneOffset());

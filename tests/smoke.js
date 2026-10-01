@@ -138,6 +138,8 @@ async function run(base) {
   check('exam: result shows the score out of 50', /\d+ \/ 50 goed/.test(await page.textContent('main')));
   check('exam: result has the honesty note (AC-6)', /Gevaarherkenning en vragen met foto's zitten niet in dit proefexamen/.test(await page.textContent('main')));
   check('exam: focus moves to the result heading', await page.evaluate(() => document.activeElement.tagName === 'H1'));
+  check('AC-11: first exam ever has no change line', !/sinds vorige|Zelfde score als vorige/.test(await page.textContent('main')));
+  check('AC-10: full exam shows the per-topic table', (await page.locator('table.onderwerpen tbody tr').count()) > 0);
   const saved = await page.evaluate(() => {
     const s = JSON.parse(localStorage.getItem('rijbewijs-b-v1'));
     const e = s.exams[s.exams.length - 1];
@@ -244,6 +246,7 @@ async function run(base) {
   await dctx.close();
 
   await part1(browser, base);
+  await part2(browser, base);
 
   await page.goto(base);
   check('service worker is active', await page.evaluate(async () => !!(await navigator.serviceWorker.ready).active));
@@ -517,6 +520,94 @@ async function part1(browser, base) {
     const s = await readState(p);
     check('AC-35: saved state is version 3 and clean after an exam', s.version === 3 && Array.isArray(s.history.voorrang || []) && histCount(s) === 1 && s.exams.length === 3, JSON.stringify({ v: s.version, h: s.history, n: s.exams.length }));
     check('AC-35: no page errors with broken data', errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+}
+
+// ---------- Exam-ready loop, part 2: result per topic, weak-topic practice, same-day mistakes ----------
+async function part2(browser, base) {
+  const NOW = new Date(2026, 9, 1, 12);
+
+  // --- AC-10, AC-11, AC-12, AC-35: time-up result with 0 answered, after an earlier 40 / 50, at 320px ---
+  {
+    const ctx = await browser.newContext({ viewport: { width: 320, height: 740 } });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+    p.on('dialog', (d) => d.accept());
+    await p.clock.install({ time: NOW });
+    await p.goto(base + '#/examen');
+    await writeState(p, { version: 3, exams: [{ date: NOW.getTime() - 86400000, score: 40, total: 50, passed: false, timeUp: false }] });
+    await p.reload();
+    await p.getByRole('button', { name: 'Start proefexamen' }).click();
+    await p.clock.runFor(31 * 60000);
+    await p.getByRole('heading', { name: /Uitslag/ }).waitFor();
+    const text = await p.textContent('main');
+    check('AC-11: change line after an earlier 40 / 50', /-40 sinds vorige: 40 \/ 50/.test(text), text.slice(0, 300));
+    check('AC-11: change line sits right under the score', await p.evaluate(() => /sinds vorige/.test(document.querySelector('.score').nextElementSibling.textContent)));
+    const rows = await p.$$eval('table.onderwerpen tbody tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
+    const nums = rows.map((r) => { const m = /^(\d+) van (\d+)$/.exec(r[1]); return m && { ok: +m[1], asked: +m[2], wrong: +r[2] }; });
+    check('AC-10: every row reads "goed van gevraagd" and fout', rows.length > 0 && nums.every((n) => n && n.asked - n.ok === n.wrong), JSON.stringify(rows));
+    check('AC-10: rows add up to 50 questions', nums.reduce((a, n) => a + n.asked, 0) === 50);
+    check('AC-10: sorted by most wrong first', nums.every((n, i) => !i || nums[i - 1].wrong >= n.wrong), JSON.stringify(rows));
+    check('AC-10: table headers have scope=col', await p.$$eval('table.onderwerpen th', (t) => t.length === 3 && t.every((x) => x.getAttribute('scope') === 'col')));
+    check('time-up footnote under the table', /Vragen die je niet op tijd hebt beantwoord, tellen hier als fout\./.test(text));
+    check('time-up with 0 answered: no "Alles goed!"', !/Alles goed!/.test(text) && /Je hebt geen vragen fout beantwoord, maar niet alle vragen op tijd gedaan\./.test(text));
+    const weakNames = rows.slice(0, 3).map((r) => r[0]);
+    check('AC-12: weak line names the top 3 topics', text.includes('Je fouten zaten vooral bij ' + weakNames[0] + ', ' + weakNames[1] + ' en ' + weakNames[2] + '.'), weakNames.join('|'));
+    const weakBtns = p.getByRole('button', { name: /^Oefen zwakke onderwerpen \(\d+\)$/ });
+    check('AC-12: weak button at top and bottom', (await weakBtns.count()) === 2);
+    const n = +(/\((\d+)\)/.exec(await weakBtns.first().textContent())[1]);
+    check('AC-12: at most 15 questions', n > 0 && n <= 15, 'n ' + n);
+    check('"Nieuw proefexamen" is secondary when there are mistakes', await p.$eval('[data-act=opnieuw]', (b) => b.classList.contains('secundair')));
+    check('AC-10: 320px result: no horizontal scroll', (await p.evaluate(() => document.documentElement.scrollWidth)) <= 320);
+    await p.screenshot({ path: path.join(SHOTS, 'part2-result-320.png'), fullPage: true });
+    await weakBtns.first().click();
+    check('AC-12: weak-topic session starts with n questions', (await p.textContent('.teller')).trim() === '1 / ' + n, await p.textContent('.teller'));
+    check('session start: focus on the session heading or the input', await p.evaluate(() => document.activeElement.matches('h1, .invul input')));
+    check('AC-12: weak session title', /Zwakke onderwerpen/.test(await p.textContent('h1')));
+    check('AC-12/35: no page errors', errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+
+  // --- AC-13, AC-16: Foutenlogboek counts mistakes answered right today; Vandaag leaves them out ---
+  {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.clock.setFixedTime(NOW);
+    await p.goto(base + '#/fouten');
+    const ids = await p.evaluate(() => window.RB.signs.slice(0, 4).map((s) => 'bord-' + s.id));
+    const day = 86400000;
+    const mistakes = {};
+    ids.forEach((id, i) => { mistakes[id] = { count: 1, streak: 0, last: NOW.getTime() - (i + 2) * day, topic: 'borden' }; });
+    Object.assign(mistakes[ids[0]], { streak: 1, okDay: '2026-10-01' });
+    await writeState(p, { version: 3, mistakes });
+    await p.reload();
+    const main = await p.textContent('main');
+    check('AC-13: "Oefen mijn fouten (4)" counts all open mistakes', await p.getByRole('button', { name: 'Oefen mijn fouten (4)' }).isEnabled());
+    check('AC-13: label on the mistake answered right today', (main.match(/Vandaag al goed\. Morgen nog 1× goed, dan is hij weg\./g) || []).length === 1);
+    check('AC-13: summary line', main.includes('1 daarvan had je vandaag al goed. Die is pas weg als je hem morgen weer goed hebt.'));
+    check('AC-13: per-topic Oefen is enabled', await p.locator('[data-topic=borden]').isEnabled());
+    await p.getByRole('button', { name: 'Oefen mijn fouten (4)' }).click();
+    check('AC-13: practice session has all 4', (await p.textContent('.teller')).trim() === '1 / 4');
+    check('session start: focus on the session heading', await p.evaluate(() => document.activeElement.tagName === 'H1'));
+    await p.goto(base + '#/start');
+    check('AC-16: Vandaag leaves the mistake answered right today out', /3 fouten herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+
+    // Only open mistake answered right today: button still enabled.
+    await writeState(p, { version: 3, mistakes: { [ids[0]]: mistakes[ids[0]] } });
+    await p.goto(base + '#/fouten'); await p.reload();
+    check('AC-13: only open one right today: button enabled', await p.getByRole('button', { name: 'Oefen mijn fouten (1)' }).isEnabled());
+    check('AC-13: only open one right today: summary line', (await p.textContent('main')).includes('Die had je vandaag al goed. Hij is pas weg als je hem morgen weer goed hebt.'));
+
+    // AC-35: broken mistake data still renders.
+    await writeState(p, { version: 3, mistakes: { [ids[0]]: { count: 1, streak: 'x', okDay: 7, last: 'gisteren' }, x: null } });
+    await p.reload();
+    check('AC-35: broken mistakes: Foutenlogboek renders without label', /Oefen mijn fouten \(1\)/.test(await p.textContent('main')) && !/Vandaag al goed/.test(await p.textContent('main')));
+    check('AC-13/16/35: no page errors', errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
 }

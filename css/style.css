@@ -8,7 +8,8 @@
   /* Contrast wit op accent: 5,2:1 (WCAG AA) */
   --accent: #c2410c;
   --accent-text: #ffffff;
-  --good: #1f8a4c;
+  /* 5,4:1 op wit en wit op groen; 4,8:1 op --good-bg */
+  --good: #1a7a43;
   --good-bg: #e5f5ec;
   --bad: #c92a2a;
   --bad-bg: #fdecec;
@@ -194,6 +195,9 @@ h3 { margin: 12px 0 6px; font-size: 1.05rem; }
 .tabel th, .tabel td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .tabel th { color: var(--muted); font-weight: 600; font-size: .85rem; }
 .tabel .getal { white-space: nowrap; font-weight: 700; }
+/* Getallen op één regel; de naamkolom neemt de rest en loopt door op smalle schermen. */
+.tabel .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; width: 1%; }
+.onderwerpen td:first-child { overflow-wrap: anywhere; }
 details summary { cursor: pointer; font-weight: 600; }
 .score { font-size: 1.6rem; font-weight: 800; margin: 4px 0 8px; }
 .lijst, .nakijk, .fouten-lijst { padding-left: 20px; }
