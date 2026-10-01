@@ -12,7 +12,7 @@
   function empty() {
     return {
       version: VERSION, srs: {}, mistakes: {}, exams: [], stats: { answered: 0, correct: 0 }, examDate: null, done: {},
-      examMonth: null, history: {}, seen: {}, answeredDay: null
+      examMonth: null, history: {}, seen: {}, answeredDay: null, today: null
     };
   }
 
@@ -69,6 +69,12 @@
     if (isObj(ad) && U.isDay(ad.day) && isObj(ad.ids)) {
       s.answeredDay = { day: ad.day, ids: eachValid(ad.ids, function (v) { return typeof v === 'boolean'; }) };
     }
+    // Doel van vandaag (deel 3); klopt er iets niet, dan null: de app rekent het opnieuw uit.
+    var td = raw.today;
+    if (isObj(td) && U.isDay(td.day) && isInt(td.target) && td.target >= 0 && isInt(td.practised) && td.practised >= 0 &&
+        typeof td.mock === 'boolean') {
+      s.today = { day: td.day, target: td.target, mock: td.mock, practised: td.practised };
+    }
     return s;
   }
 
@@ -102,19 +108,21 @@
 
   // Eerste antwoord per vraag per dag komt in de geschiedenis van het onderwerp (max. HISTORY).
   // Of een vraag vandaag al telde, staat los van die ingekorte lijst in answeredDay.
+  // Geeft true als het antwoord is toegevoegd (het eerste van vandaag voor deze vraag).
   function addHistory(item, ok) {
     var t = String(item.topic);
     var id = String(item.id);
-    if (!safeKey(t) || !safeKey(id)) return;
+    if (!safeKey(t) || !safeKey(id)) return false;
     var day = U.dayKey();
     if (!state.answeredDay || state.answeredDay.day !== day) state.answeredDay = { day: day, ids: {} };
     var ids = state.answeredDay.ids;
     var list = Object.prototype.hasOwnProperty.call(state.history, t) ? state.history[t] : (state.history[t] = []);
     // De lijst-check vangt ook antwoorden van vandaag van voor answeredDay bestond.
-    if (Object.prototype.hasOwnProperty.call(ids, id) || list.some(function (h) { return h.id === id && h.day === day; })) return;
+    if (Object.prototype.hasOwnProperty.call(ids, id) || list.some(function (h) { return h.id === id && h.day === day; })) return false;
     ids[id] = true;
     list.push({ id: id, ok: !!ok, day: day });
     if (list.length > HISTORY) list.splice(0, list.length - HISTORY);
+    return true;
   }
   function markSeen(id) {
     if (typeof id === 'string' && safeKey(id)) state.seen[id] = U.dayKey();
@@ -146,8 +154,10 @@
     // Elk antwoord op een vraag (niet de flashcards) komt hier langs.
     // Een fout is opgelost als je de vraag daarna goed hebt op twee verschillende dagen.
     // Ook de antwoordgeschiedenis en "gezien" (voor het plan en de examencheck).
-    recordAnswer: function (item, correct, given) {
-      addHistory(item, correct);
+    // inExam: antwoord uit een proefexamen; dat telt niet als "gedaan" voor het doel van vandaag.
+    recordAnswer: function (item, correct, given, inExam) {
+      var first = addHistory(item, correct);
+      if (first && !inExam && state.today && state.today.day === U.dayKey()) state.today.practised++;
       markSeen(item.id);
       state.stats.answered++;
       if (correct) state.stats.correct++;
@@ -208,6 +218,23 @@
     markDone: function (id, ok) {
       state.done[id] = !!ok;
       save();
+    },
+
+    // Doel van vandaag: { day, target, mock, practised }, of null als het nog niet voor vandaag is vastgezet.
+    today: function () {
+      var t = state.today;
+      return t && t.day === U.dayKey() ? t : null;
+    },
+    // Zet het doel van vandaag vast (of opnieuw, na een nieuwe examendatum). Wat vandaag al gedaan is, blijft tellen.
+    setToday: function (target, mock) {
+      var day = U.dayKey();
+      var n = Math.floor(Number(target));
+      state.today = {
+        day: day, target: isFinite(n) && n > 0 ? n : 0, mock: !!mock,
+        practised: state.today && state.today.day === day ? state.today.practised : 0
+      };
+      save();
+      return state.today;
     },
 
     addExam: function (result) {

@@ -597,7 +597,7 @@ async function part2(browser, base) {
     check('AC-13: practice session has all 4', (await p.textContent('.teller')).trim() === '1 / 4');
     check('session start: focus on the session heading', await p.evaluate(() => document.activeElement.tagName === 'H1'));
     await p.goto(base + '#/start');
-    check('AC-16: Vandaag leaves the mistake answered right today out', /3 fouten herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+    check('AC-16: Vandaag leaves the mistake answered right today out', /(^|\D)3 fouten( ·|$)/.test(await p.textContent('.vandaag .plan-detail')), await p.textContent('.vandaag'));
 
     // Only open mistake answered right today: button still enabled.
     await writeState(p, { version: 3, mistakes: { [ids[0]]: mistakes[ids[0]] } });
@@ -926,7 +926,7 @@ async function part2Edge(browser, base) {
 
     // AC-16: all 3 borden mistakes are right today → Vandaag leaves them out; the parkeren one stays.
     await p.goto(base + '#/start');
-    check('AC-16: Vandaag leaves out every mistake right today', /(^|\D)1 fout herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+    check('AC-16: Vandaag leaves out every mistake right today', /(^|\D)1 fout( ·|$)/.test(await p.textContent('.vandaag .plan-detail')), await p.textContent('.vandaag'));
 
     // AC-15 in the UI: answer one of them wrong today → back in Vandaag.
     await p.goto(base + '#/fouten');
@@ -935,7 +935,7 @@ async function part2Edge(browser, base) {
     s = await readState(p);
     check('AC-15: wrong after right today: streak 0, okDay null', s.mistakes[w.id].streak === 0 && s.mistakes[w.id].okDay == null && !s.mistakes[w.id].resolved, JSON.stringify(s.mistakes[w.id]));
     await p.goto(base + '#/start');
-    check('AC-15/16: the mistake answered wrong again is back in Vandaag', /2 fouten herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+    check('AC-15/16: the mistake answered wrong again is back in Vandaag', /(^|\D)2 fouten( ·|$)/.test(await p.textContent('.vandaag .plan-detail')), await p.textContent('.vandaag'));
 
     // AC-14 next day: right once more resolves it.
     await p.clock.setFixedTime(new Date(2026, 9, 2, 9));
@@ -951,7 +951,7 @@ async function part2Edge(browser, base) {
     check('AC-13: all open right today: "allemaal" line', (await p.textContent('main')).includes('Die had je vandaag allemaal al goed. Ze zijn pas weg als je ze morgen weer goed hebt.'));
     check('AC-13: all open right today: button enabled with all 3', await p.getByRole('button', { name: 'Oefen mijn fouten (3)' }).isEnabled());
     await p.goto(base + '#/start');
-    check('AC-16: all mistakes right today: Vandaag has no mistakes to repeat', !/fouten? herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+    check('AC-16: all mistakes right today: Vandaag has no mistakes to repeat', !/\d fouten?( ·|$)/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
     const done = {};
     signs.forEach((x) => { done[x.id] = { count: 1, streak: 2, resolved: true, last: NOW.getTime() }; });
     await writeState(p, { version: 3, mistakes: done });

@@ -255,6 +255,7 @@
       renderQuestion(main.querySelector('.q'), item, {
         reverse: opts.reverse,
         onAnswer: function (ok, given) {
+          ensureToday(); // eerst het doel van vandaag vastzetten, dan telt dit antwoord als "gedaan"
           store.recordAnswer(item, ok, given);
           if (ok) score++; else wrong.push(item);
           if (item.kind === 'voorrang') store.markDone(item.id, ok);
@@ -287,36 +288,32 @@
     return (Number(m[b].last) || 0) - (Number(m[a].last) || 0);
   }
 
-  // ---------- Vandaag: één knop voor wat je nu het beste kunt oefenen ----------
-  // Open fouten (die vandaag nog niet goed waren), kaarten die aan de beurt zijn en een paar nieuwe vragen.
-  function todayPlan() {
-    var mistakes = store.openMistakes(known)
-      .filter(function (id) { return !store.okToday(id); })
-      .sort(newestMistake)
-      .map(function (id) { return items[id]; });
-    var inPlan = {};
-    mistakes = mistakes.slice(0, 10);
-    mistakes.forEach(function (x) { inPlan[x.id] = true; });
-    var due = shuffle(flashcardPool('alles').filter(function (c) { return !inPlan[c.id] && store.isDue(c.id); })).slice(0, 10);
-    due.forEach(function (x) { inPlan[x.id] = true; });
-    // Nieuwe vragen, bij voorkeur uit het onderwerp met de meeste open fouten.
-    var weak = weakestTopic();
-    var fresh = shuffle(flashcardPool('alles').filter(function (c) { return !inPlan[c.id] && !store.card(c.id); }));
-    fresh.sort(function (a, b) { return (b.topic === weak) - (a.topic === weak); });
-    var nNew = Math.max(5, 15 - mistakes.length - due.length);
-    fresh = fresh.slice(0, nNew);
-    return { mistakes: mistakes, due: due, fresh: fresh, weak: weak, list: shuffle(mistakes.concat(due, fresh)) };
+  // ---------- Vandaag: het plan uit de examendatum (U.dayPlan) ----------
+  function planNow() { return U.dayPlan(store.state(), shuffle(all()), Date.now()); }
+  // Het doel van vandaag ligt vast vanaf het eerste moment van de dag (AC-28).
+  function ensureToday() {
+    var td = store.today();
+    if (td) return td;
+    var plan = planNow();
+    return store.setToday(plan.target, plan.mock);
   }
-  function weakestTopic() {
-    var count = {};
-    store.openMistakes(known).forEach(function (id) { var t = items[id].topic; count[t] = (count[t] || 0) + 1; });
-    var best = null;
-    Object.keys(count).forEach(function (t) { if (!best || count[t] > count[best]) best = t; });
-    return best;
+  // Na een nieuwe examendatum: doel en ritme opnieuw; wat al gedaan is, blijft tellen (AC-28).
+  function resetToday() {
+    var plan = planNow();
+    store.setToday(plan.target, plan.mock);
+  }
+  // Vragen voor een ronde "Vandaag": wat er nog over is van het doel, in planvolgorde.
+  // Doel al gehaald ("Nog een ronde"): de volgende 15 uit het plan, of anders de langst niet geziene.
+  function todayList() {
+    var td = ensureToday();
+    var plan = planNow();
+    var left = Math.max(0, Number(td.target) - Number(td.practised));
+    var ids = plan.order.slice(0, left || 15);
+    if (!ids.length) ids = U.freshFirst(store.state(), shuffle(all())).slice(0, 15).map(function (x) { return x.id; });
+    return shuffle(ids.map(function (id) { return items[id]; }));
   }
   function runToday() {
-    var plan = todayPlan();
-    runSession('Vandaag', plan.list, runToday, {
+    runSession('Vandaag', todayList(), runToday, {
       againLabel: 'Nog een ronde',
       note: 'Een fout is opgelost als je hem op twee verschillende dagen goed hebt. Wat je vandaag goed had, komt morgen terug.',
       // Alles uit "Vandaag" (behalve voorrang) gaat ook in de herhaling van de flashcards.
@@ -330,16 +327,11 @@
 
   views.start = function () {
     var st = store.state();
-    var plan = todayPlan();
     var cards = flashcardPool('alles');
     var fresh = cards.filter(function (c) { return !store.card(c.id); }).length;
     var due = cards.filter(function (c) { return store.isDue(c.id); }).length;
     var open = store.openMistakes(known).length;
     var last = st.exams[st.exams.length - 1];
-    var parts = [];
-    if (plan.mistakes.length) parts.push(plan.mistakes.length + ' ' + (plan.mistakes.length === 1 ? 'fout' : 'fouten') + ' herhalen');
-    if (plan.due.length) parts.push(plan.due.length + ' ' + (plan.due.length === 1 ? 'kaart' : 'kaarten') + ' herhalen');
-    if (plan.fresh.length) parts.push(plan.fresh.length + ' nieuwe vragen' + (plan.weak ? ' (vooral ' + topicName(plan.weak).toLowerCase() + ')' : ''));
 
     main.innerHTML =
       '<section class="kaart intro"><h1>Oefenen voor je theorie-examen auto (B)</h1>' +
@@ -350,12 +342,8 @@
       '</select><span class="datum-veld"></span></div>' +
       '<p class="aftellen" role="status"></p><p class="klein datum-hint" hidden></p></div>' +
       '</section>' +
-      '<section class="kaart vandaag"><h2>Vandaag</h2>' +
-      (plan.list.length
-        ? '<p>' + esc(parts.join(' · ')) + '. Ongeveer ' + Math.max(1, Math.round(plan.list.length * 0.5)) + ' minuten.</p>' +
-          '<div class="rij"><button class="knop groot" data-act="vandaag">Start (' + plan.list.length + ' vragen)</button></div>'
-        : '<p>Je hebt alles voor vandaag gedaan. Doe een proefexamen of kom morgen terug.</p>') +
-      '</section>' +
+      '<section class="kaart vandaag" aria-labelledby="vandaag-kop"></section>' +
+      '<section class="kaart klaar" aria-labelledby="klaar-kop"></section>' +
       '<div class="tegels">' +
       tile('#/kaarten', 'Flashcards', due + ' te herhalen', fresh + ' nog niet gezien') +
       tile('#/borden', 'Verkeersborden', RB.signs.length + ' borden', 'Bord ↔ betekenis') +
@@ -365,14 +353,134 @@
       tile('#/fouten', 'Foutenlogboek', open + ' open ' + (open === 1 ? 'fout' : 'fouten'), st.stats.answered ? pct(st.stats.correct, st.stats.answered) + '% goed van ' + st.stats.answered : 'Nog niets beantwoord') +
       '</div>' +
       '<p class="noot">Dit is een eigen oefenapp met eigen vragen, geen officieel CBR-materiaal. Gevaarherkenning (de filmpjes in het echte examen) zit er nog niet in. Controleer twijfelgevallen altijd bij het CBR of in je theorieboek.</p>';
-    examDateControl(main.querySelector('.datum'));
-    var btn = main.querySelector('[data-act=vandaag]');
-    if (btn) btn.onclick = runToday;
+    var todayBox = main.querySelector('.vandaag');
+    renderToday(todayBox);
+    renderReady(main.querySelector('.klaar'));
+    // Nieuwe examendatum: alleen de Vandaag-kaart opnieuw, zodat de focus in het datumveld blijft.
+    examDateControl(main.querySelector('.datum'), function () {
+      resetToday();
+      renderToday(todayBox);
+    });
   };
+
+  // De Vandaag-kaart: doelregel, wat er in het plan zit, uitleg en knoppen.
+  function renderToday(box) {
+    var st = store.state();
+    var td = ensureToday();
+    var plan = planNow();
+    var target = Number(td.target) || 0;
+    var done = Number(td.practised) || 0;
+    var mockDone = st.exams.some(function (e) { return U.dayKey(Number(e.date)) === plan.today; });
+    var next = plan.order.slice(0, Math.max(0, target - done));
+    var s = U.todayStatus({
+      target: target, practised: done, mock: td.mock === true, mockDone: mockDone, available: next.length,
+      welcome: plan.welcome, rest: plan.rules.mode === 'datum' && plan.rules.D <= 1
+    });
+    var nulmeting = s.mockLeft && !st.exams.length;
+    var html = '<h2 id="vandaag-kop" tabindex="-1">Vandaag</h2><p class="doel">' + esc(s.line) + '</p>';
+    if (s.state === 'bezig') {
+      var inList = function (ids) { return next.filter(function (id) { return ids.indexOf(id) >= 0; }); };
+      var freshIds = inList(plan.fresh);
+      var weakFresh = plan.weak && freshIds.some(function (id) { return items[id].topic === plan.weak; });
+      html += '<p class="klein plan-detail">' + esc(U.planDetail(inList(plan.mistakes).length, inList(plan.due).length, freshIds.length,
+        weakFresh ? topicName(plan.weak).toLowerCase() : '')) + '</p>';
+    }
+    if (s.state === 'bezig' || s.state === 'examen' || s.state === 'leeg') {
+      html += U.planNotes(plan.rules).map(function (t) { return '<p class="klein">' + esc(t) + '</p>'; }).join('');
+    }
+    var mockLabel = nulmeting ? 'Proefexamen (nulmeting)' : 'Proefexamen';
+    if (s.state === 'bezig') {
+      html += '<div class="rij"><button class="knop groot" data-act="vandaag">' + (done ? 'Ga verder (' : 'Start (') + next.length + ' ' + (next.length === 1 ? 'vraag' : 'vragen') + ')</button>' +
+        (s.mockLeft ? '<a class="knop secundair" href="#/examen">' + mockLabel + '</a>' : '') + '</div>';
+    } else if (s.state === 'examen') {
+      html += '<div class="rij"><a class="knop groot" href="#/examen">' + (nulmeting ? mockLabel : 'Doe het proefexamen') + '</a>' +
+        '<button class="knop secundair" data-act="vandaag">Nog een ronde</button></div>';
+    } else if (s.state === 'gehaald') {
+      html += '<p class="klein">Morgen staat er weer een nieuw plan klaar.</p>' +
+        '<div class="rij"><button class="knop secundair" data-act="vandaag">Nog een ronde</button></div>';
+    }
+    if (nulmeting) html += '<p class="klein">Een eerste proefexamen laat zien waar je nu staat.</p>';
+    box.innerHTML = html;
+    var btn = box.querySelector('[data-act=vandaag]');
+    if (btn) btn.onclick = runToday;
+  }
+
+  // De kaart "Klaar voor het examen?" (AC-29 … AC-32).
+  function renderReady(box) {
+    var r = U.readiness(store.state(), all(), Date.now(), topicName);
+    var act = !r.noData; // zonder gegevens geen knoppen per eis
+    var status = function (met) { return met ? '<span class="status goed">Gehaald</span>' : '<span class="status">Nog niet</span>'; };
+    var row = function (t, withBtn) {
+      return '<li class="onderwerp-rij"><strong>' + esc(t.name) + '</strong>' + (t.met ? ' <span class="status goed">Gehaald</span>' : '') +
+        '<div class="klein">' + esc(t.text) + '</div>' +
+        (withBtn && act && !t.met ? '<button type="button" class="knop klein secundair" data-act="onderwerp" data-topic="' + esc(t.topic) + '">Oefen ' + esc(t.name) + '</button>' : '') + '</li>';
+    };
+    var e1 = r.eis1, e2 = r.eis2, e3 = r.eis3;
+    var unmet = e2.rows.filter(function (t) { return !t.met; });
+    box.innerHTML = '<h2 id="klaar-kop">Klaar voor het examen?</h2>' +
+      '<p class="klaar-status">' + esc(r.headline) + '</p>' +
+      (r.noData ? '<p>Maak eerst vragen bij Vandaag. Dan zie je hier hoe ver je bent.</p>' +
+        '<p><button type="button" class="link-knop in-tekst" data-act="naar-vandaag">Naar Vandaag</button></p>' : '') +
+      '<ol class="eisen">' +
+      '<li class="eis"><h3>Proefexamens ' + status(e1.met) + '</h3>' +
+        '<p class="klein">Minstens 3 proefexamens, de laatste 3 allemaal 46 of meer goed</p>' +
+        '<p class="klein">Je hebt er 44 nodig om te slagen; 46 geeft wat marge.</p>' +
+        '<p>' + esc(e1.text) + '</p>' +
+        (act && !e1.met ? '<div class="rij"><a class="knop secundair" href="#/examen">Doe een proefexamen</a></div>' : '') + '</li>' +
+      '<li class="eis"><h3>Onderwerpen ' + status(e2.met) + '</h3>' +
+        '<p class="klein">Elk onderwerp 90% of meer goed over de laatste 20 antwoorden</p>' +
+        '<p>' + esc(e2.text) + '</p>' +
+        (unmet.length ? '<ul class="onderwerpen-lijst">' + unmet.slice(0, 3).map(function (t) { return row(t, true); }).join('') + '</ul>' : '') +
+        '<details><summary>Alle onderwerpen (' + e2.total + ')</summary><ul class="onderwerpen-lijst">' +
+        e2.rows.map(function (t) { return row(t, true); }).join('') + '</ul></details></li>' +
+      '<li class="eis"><h3>Oude fouten ' + status(e3.met) + '</h3>' +
+        '<p class="klein">Geen open fouten ouder dan 2 dagen</p>' +
+        '<p>' + esc(e3.text) + '</p>' +
+        (act && !e3.met ? '<div class="rij"><button type="button" class="knop secundair" data-act="oude-fouten">Oefen oude fouten (' + e3.ids.length + ')</button></div>' : '') + '</li>' +
+      '</ol>' +
+      '<p class="noot">Gevaarherkenning en vragen met foto\'s meet deze app niet. Oefen die met je theorieboek en de filmpjes die erbij horen.</p>' +
+      '<p class="noot">Je kent veel van deze vragen al; het echte examen heeft andere vragen.</p>' +
+      '<p class="noot">' + r.seen + ' van ' + r.total + ' vragen minstens 1× gezien</p>';
+    box.onclick = function (e) {
+      var t = e.target.closest('[data-act]');
+      if (!t) return;
+      var a = t.getAttribute('data-act');
+      if (a === 'naar-vandaag') {
+        var kop = document.getElementById('vandaag-kop');
+        kop.scrollIntoView({ block: 'start' });
+        kop.focus();
+      } else if (a === 'onderwerp') {
+        practiseTopic(t.getAttribute('data-topic'));
+      } else if (a === 'oude-fouten') {
+        practiseOld();
+      }
+    };
+  }
+  // "Oefen <onderwerp>" uit de examencheck: max. 15, fouten eerst, dan nooit of lang niet gezien.
+  function practiseTopic(topic) {
+    var start = function () {
+      var ids = U.topicPractice(store.state(), shuffle(all()), topic, Date.now(), 15);
+      if (!ids.length) { go('#/start'); return; }
+      runSession(topicName(topic), ids.map(function (id) { return items[id]; }), start);
+    };
+    start();
+  }
+  // "Oefen oude fouten": alle open fouten van vóór eergisteren, oudste eerst.
+  function practiseOld() {
+    var start = function () {
+      var ids = U.readiness(store.state(), all(), Date.now(), topicName).eis3.ids;
+      if (!ids.length) { go('#/start'); return; }
+      runSession('Oude fouten', ids.map(function (id) { return items[id]; }), start, {
+        note: 'Wat je vandaag goed had, komt morgen nog één keer terug. Is het dan weer goed, dan is de fout opgelost. Vandaag vaker oefenen mag, maar telt niet extra.'
+      });
+    };
+    start();
+  }
 
   // Examendatum op de startpagina: "Nog niet gepland", een maand (schatting) of een precieze datum.
   // Bij een wijziging passen we alleen dit blok aan, nooit het datumveld waarin je aan het typen bent.
-  function examDateControl(box) {
+  // onChange: wordt aangeroepen als de opgeslagen datum of maand verandert.
+  function examDateControl(box, onChange) {
     var kindSel = box.querySelector('#examen-soort');
     var slot = box.querySelector('.datum-veld');
     var status = box.querySelector('.aftellen');
@@ -382,6 +490,7 @@
     // Laatst opgeslagen datum en maand in deze weergave: wisselen tussen de soorten mag ze niet kwijtraken.
     var lastDate = store.state().examDate;
     var lastMonth = store.state().examMonth;
+    var savedKey = lastDate + '|' + lastMonth;
 
     function kind() {
       var st = store.state();
@@ -472,6 +581,11 @@
       if (status.innerHTML !== text) status.innerHTML = text;
       hint.hidden = !tip;
       hint.innerHTML = tip;
+      var key = st.examDate + '|' + st.examMonth;
+      if (key !== savedKey) {
+        savedKey = key;
+        if (onChange) onChange();
+      }
     }
 
     kindSel.onchange = function () {
@@ -683,9 +797,11 @@
   };
 
   function runExam() {
-    var voorrang = sample(all(function (x) { return x.kind === 'voorrang'; }), EXAM.voorrang);
-    var inzicht = sample(all(function (x) { return x.part === 'inzicht' && x.kind !== 'voorrang'; }), EXAM.inzicht);
-    var kennis = sample(all(function (x) { return x.part === 'kennis'; }), EXAM.n - voorrang.length - inzicht.length);
+    // Binnen de vaste verdeling eerst nooit geziene items, dan de langst niet geziene (AC-33).
+    var pick = function (filter, n) { return U.freshFirst(store.state(), shuffle(all(filter))).slice(0, n); };
+    var voorrang = pick(function (x) { return x.kind === 'voorrang'; }, EXAM.voorrang);
+    var inzicht = pick(function (x) { return x.part === 'inzicht' && x.kind !== 'voorrang'; }, EXAM.inzicht);
+    var kennis = pick(function (x) { return x.part === 'kennis'; }, EXAM.n - voorrang.length - inzicht.length);
     var list = shuffle(kennis.concat(inzicht, voorrang));
     var i = 0;
     var answers = [];
@@ -732,7 +848,7 @@
       over = true;
       cleanup();
       answers.forEach(function (a) {
-        store.recordAnswer(a.item, a.ok, a.given);
+        store.recordAnswer(a.item, a.ok, a.given, true); // telt niet als "gedaan" voor Vandaag (AC-27)
         if (a.item.kind === 'voorrang') store.markDone(a.item.id, a.ok);
       });
       var score = answers.filter(function (a) { return a.ok; }).length;

@@ -105,6 +105,21 @@ h3 { margin: 12px 0 6px; font-size: 1.05rem; }
 .belofte { margin: 0 0 12px; }
 .vandaag { border: 2px solid var(--accent); }
 .vandaag p { margin: 0; }
+.vandaag p + p { margin-top: 6px; }
+.doel { font-weight: 600; }
+
+/* Klaar voor het examen? */
+.klaar-status { font-size: 1.1rem; font-weight: 700; margin: 0 0 8px; }
+.eisen { list-style: none; padding: 0; margin: 0; }
+.eis { border-top: 1px solid var(--line); padding: 10px 0; }
+.eis h3 { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; }
+.eis p { margin: 2px 0; }
+.onderwerpen-lijst { list-style: none; padding: 0; margin: 6px 0 0; }
+.onderwerp-rij { border-top: 1px solid var(--line); padding: 8px 0; overflow-wrap: anywhere; }
+.onderwerp-rij .knop { margin-top: 6px; min-height: 44px; }
+.eis details { margin-top: 6px; }
+.eis details summary { padding: 11px 0; }
+.klaar .noot { margin: 6px 0 0; }
 
 /* Tegels op de startpagina */
 .tegels { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
