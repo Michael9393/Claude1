@@ -1108,7 +1108,7 @@ async function part3(browser, base) {
   check('part 3: no page errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
 
-  // --- BUG (see report): after a mock exam, the Vandaag round serves the exam mistakes, which never count as "gedaan" ---
+  // --- AC-27: after a mock exam, the Vandaag round serves the exam mistakes; they still count as "gedaan" ---
   {
     const c2 = await browser.newContext({ viewport: { width: 360, height: 740 } });
     await c2.addInitScript(installOracle);
@@ -1126,7 +1126,7 @@ async function part3(browser, base) {
     for (let k = 0; k < 5; k++) { await q.locator('.q').waitFor(); await q.evaluate(() => window.__q.answer(true)); }
     await q.goto(base + '#/start'); await q.reload();
     const line = (await t2.locator('p').first().textContent()).trim();
-    check('[BUG] AC-27: after the nulmeting, a full "Start (5 vragen)" round counts as 5 gedaan', /· 5 gedaan$/.test(line), line);
+    check('AC-27: after the nulmeting, a full "Start (5 vragen)" round counts as 5 gedaan', /· 5 gedaan$/.test(line), line);
     check('part 3 mock-first: no page errors', e2.length === 0, e2.join(' | '));
     await c2.close();
   }

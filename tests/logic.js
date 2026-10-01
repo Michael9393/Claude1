@@ -1436,9 +1436,9 @@ test('AC-27: zonder vastgezet doel voor vandaag telt recordAnswer niet; de app z
   S.recordAnswer({ id: 'bord-y', topic: 'borden' }, true);
   same(S.today(), { day: '2026-09-30', target: 20, mock: false, practised: 1 });
 });
-// BUG (zie rapport): na een proefexamen bestaat het plan eerst uit de net gemaakte examenfouten, maar die tellen
-// niet als "gedaan" (eerste antwoord van de dag was in het examen). Een hele ronde "Start (5 vragen)" geeft 0 gedaan.
-test('AC-27 [BUG]: na een proefexamen telt een ronde Vandaag (uit het plan) gewoon als "gedaan"', () => {
+// Na een proefexamen bestaat het plan eerst uit de net gemaakte examenfouten; die tellen toch als "gedaan",
+// want "gedaan" is het eerste antwoord per vraag per dag búiten een proefexamen (los van de AC-2-geschiedenis).
+test('AC-27: na een proefexamen telt een ronde Vandaag (uit het plan) gewoon als "gedaan"', () => {
   const { U, S } = setup(undefined);
   const bank = Array.from({ length: 60 }, (_, i) => ({ id: 'q' + i, topic: 't' + (i % 3), kind: 'mc' }));
   let p = U.dayPlan(S.state(), bank, SEP30);
@@ -1477,6 +1477,43 @@ test('AC-28: het doel blijft 30 als fouten worden opgelost (plan krimpt, opgesla
   assert.strictEqual(S.today().practised, 10);
   const again = load(env.data['rijbewijs-b-v1'], SEP30 + HOUR).RB.store;
   same(again.today(), { day: '2026-09-30', target: 10, mock: false, practised: 10 });
+});
+test('AC-28: nieuwe datum midden op de dag: nieuw doel = al gedaan + doel voor wat er nog in het plan staat', () => {
+  const wrong = mk('gedrag', 10);
+  const fresh = mk('borden', 80);
+  const bank = wrong.concat(fresh);
+  const raw = { version: 3, mistakes: mis(idsOf(wrong), T(2026, 9, 20)), seen: seenOn(idsOf(wrong), '2026-09-20'), exams: [exam(40, T(2026, 9, 29))] };
+  const { U, S } = setup(raw);
+  const p = U.dayPlan(S.state(), bank, SEP30); // geen datum: 10 fouten + 10 nieuwe, geen proefexamen
+  assert.deepStrictEqual([p.mistakes.length, p.fresh.length, p.mock, p.target], [10, 10, false, 20]);
+  S.setToday(p.target, p.mock);
+  for (const x of wrong) S.recordAnswer(x, true);
+  assert.strictEqual(S.today().practised, 10);
+  S.setExamDate('2026-10-15'); // D = 15, U = 80: 10 nieuwe per dag, proefexamen om de 4 dagen (gisteren gedaan)
+  const t = U.replanToday(S.state(), bank, SEP30);
+  same(t, { target: 20, mock: false });
+  S.setToday(t.target, t.mock);
+  same(S.today(), { day: '2026-09-30', target: 20, mock: false, practised: 10 });
+  const st = U.todayStatus({ target: 20, practised: 10, mock: false, available: U.dayPlan(S.state(), bank, SEP30).order.length });
+  assert.strictEqual(st.state, 'bezig', 'niet al "gehaald" na 10 van de 20');
+  // Halveren voor een proefexamen geldt alleen voor het restant: 10 gedaan + ⌈10/2⌉.
+  const withMock = setup(Object.assign({}, raw, { exams: [] }));
+  withMock.S.setToday(20, true);
+  for (const x of wrong) withMock.S.recordAnswer(x, true);
+  withMock.S.setExamDate('2026-10-15');
+  same(withMock.U.replanToday(withMock.S.state(), bank, SEP30), { target: 15, mock: true });
+});
+test('AC-27/35: clean: practisedDay alleen met geldige dag, eigen sleutels en waarde true', () => {
+  const raw = '{"version":3,"practisedDay":{"day":"2026-09-30","ids":{"a":true,"b":1,"__proto__":true,"constructor":true,"c":"true"}}}';
+  same(setup(raw).st.practisedDay, { day: '2026-09-30', ids: { a: true } });
+  for (const practisedDay of [null, 'x', [], { day: '2026-02-31', ids: {} }, { day: '2026-09-30', ids: [] }, { day: '2026-09-30' }]) {
+    assert.strictEqual(setup({ version: 3, practisedDay }).st.practisedDay, null, JSON.stringify(practisedDay));
+  }
+  // Een lijst van gisteren telt vandaag niet: hetzelfde id telt vandaag weer als "gedaan".
+  const { S } = setup({ version: 3, practisedDay: { day: '2026-09-29', ids: { a: true } } });
+  S.setToday(5, false);
+  S.recordAnswer({ id: 'a', topic: 'snelheid' }, true);
+  assert.strictEqual(S.today().practised, 1);
 });
 test('AC-28: setToday met rommel: NaN/negatief → 0, kommagetal naar beneden, mock als boolean', () => {
   const { S } = setup({ version: 3 });

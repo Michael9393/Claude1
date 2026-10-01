@@ -313,6 +313,15 @@
     };
   }
 
+  // Nieuw doel na een andere examendatum, midden op de dag (AC-28): wat vandaag al gedaan is, plus het doel voor
+  // wat er nu nog in het plan staat (halveren voor een proefexamen geldt alleen voor dat restant). { target, mock }.
+  function replanToday(state, bank, now) {
+    var p = dayPlan(state, bank, now);
+    var td = state.today;
+    var done = td && td.day === p.today ? Number(td.practised) || 0 : 0;
+    return { target: done + p.target, mock: p.mock };
+  }
+
   // Minuten voor n vragen: 30 s per vraag, naar boven afgerond op 5 minuten.
   function minutes(n) { return n > 0 ? Math.ceil(n / 10) * 5 : 0; }
 
@@ -448,6 +457,6 @@
     joinNames: joinNames, okTodayLine: okTodayLine,
     dayDiff: dayDiff, wasSeen: wasSeen, freshFirst: freshFirst, orderMistakes: orderMistakes, planRules: planRules,
     mockDue: mockDue, lastActivity: lastActivity, dayPlan: dayPlan, minutes: minutes, todayStatus: todayStatus,
-    planDetail: planDetail, planNotes: planNotes, topicPractice: topicPractice, readiness: readiness
+    planDetail: planDetail, planNotes: planNotes, replanToday: replanToday, topicPractice: topicPractice, readiness: readiness
   };
 })();

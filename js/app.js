@@ -297,10 +297,10 @@
     var plan = planNow();
     return store.setToday(plan.target, plan.mock);
   }
-  // Na een nieuwe examendatum: doel en ritme opnieuw; wat al gedaan is, blijft tellen (AC-28).
+  // Na een nieuwe examendatum: doel en ritme opnieuw; wat al gedaan is, telt mee in het nieuwe doel (AC-28).
   function resetToday() {
-    var plan = planNow();
-    store.setToday(plan.target, plan.mock);
+    var t = U.replanToday(store.state(), shuffle(all()), Date.now());
+    store.setToday(t.target, t.mock);
   }
   // Vragen voor een ronde "Vandaag": wat er nog over is van het doel, in planvolgorde.
   // Doel al gehaald ("Nog een ronde"): de volgende 15 uit het plan, of anders de langst niet geziene.

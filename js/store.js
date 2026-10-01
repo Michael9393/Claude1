@@ -12,7 +12,7 @@
   function empty() {
     return {
       version: VERSION, srs: {}, mistakes: {}, exams: [], stats: { answered: 0, correct: 0 }, examDate: null, done: {},
-      examMonth: null, history: {}, seen: {}, answeredDay: null, today: null
+      examMonth: null, history: {}, seen: {}, answeredDay: null, today: null, practisedDay: null
     };
   }
 
@@ -75,6 +75,11 @@
         typeof td.mock === 'boolean') {
       s.today = { day: td.day, target: td.target, mock: td.mock, practised: td.practised };
     }
+    // Welke vragen vandaag al als "gedaan" telden (buiten een proefexamen); geen geldige dag of lijst: null.
+    var pd = raw.practisedDay;
+    if (isObj(pd) && U.isDay(pd.day) && isObj(pd.ids)) {
+      s.practisedDay = { day: pd.day, ids: eachValid(pd.ids, function (v) { return v === true; }) };
+    }
     return s;
   }
 
@@ -108,21 +113,31 @@
 
   // Eerste antwoord per vraag per dag komt in de geschiedenis van het onderwerp (max. HISTORY).
   // Of een vraag vandaag al telde, staat los van die ingekorte lijst in answeredDay.
-  // Geeft true als het antwoord is toegevoegd (het eerste van vandaag voor deze vraag).
   function addHistory(item, ok) {
     var t = String(item.topic);
     var id = String(item.id);
-    if (!safeKey(t) || !safeKey(id)) return false;
+    if (!safeKey(t) || !safeKey(id)) return;
     var day = U.dayKey();
     if (!state.answeredDay || state.answeredDay.day !== day) state.answeredDay = { day: day, ids: {} };
     var ids = state.answeredDay.ids;
     var list = Object.prototype.hasOwnProperty.call(state.history, t) ? state.history[t] : (state.history[t] = []);
     // De lijst-check vangt ook antwoorden van vandaag van voor answeredDay bestond.
-    if (Object.prototype.hasOwnProperty.call(ids, id) || list.some(function (h) { return h.id === id && h.day === day; })) return false;
+    if (Object.prototype.hasOwnProperty.call(ids, id) || list.some(function (h) { return h.id === id && h.day === day; })) return;
     ids[id] = true;
     list.push({ id: id, ok: !!ok, day: day });
     if (list.length > HISTORY) list.splice(0, list.length - HISTORY);
-    return true;
+  }
+  // "Gedaan" (AC-27): het eerste antwoord per vraag per dag búiten een proefexamen. Los van answeredDay (AC-2),
+  // anders telt een vraag die je vandaag eerst in het proefexamen had, bij Vandaag nooit meer mee.
+  function addPractised(item) {
+    var id = String(item.id);
+    if (!safeKey(id)) return;
+    var day = U.dayKey();
+    if (!state.practisedDay || state.practisedDay.day !== day) state.practisedDay = { day: day, ids: {} };
+    var ids = state.practisedDay.ids;
+    if (Object.prototype.hasOwnProperty.call(ids, id)) return;
+    ids[id] = true;
+    if (state.today && state.today.day === day) state.today.practised++;
   }
   function markSeen(id) {
     if (typeof id === 'string' && safeKey(id)) state.seen[id] = U.dayKey();
@@ -156,8 +171,8 @@
     // Ook de antwoordgeschiedenis en "gezien" (voor het plan en de examencheck).
     // inExam: antwoord uit een proefexamen; dat telt niet als "gedaan" voor het doel van vandaag.
     recordAnswer: function (item, correct, given, inExam) {
-      var first = addHistory(item, correct);
-      if (first && !inExam && state.today && state.today.day === U.dayKey()) state.today.practised++;
+      addHistory(item, correct);
+      if (!inExam) addPractised(item);
       markSeen(item.id);
       state.stats.answered++;
       if (correct) state.stats.correct++;
