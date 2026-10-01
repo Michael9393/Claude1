@@ -14,7 +14,7 @@ Full decisions: `docs/product/vision.md` (section "Decisions from the user").
 
 ## Where things are
 
-- **Branch:** `claude/product-team-review-mp0d52` (all work is here, pushed, not merged; no PR opened).
+- **Branch:** everything up to Part 3 is merged into `main` (PR #2, 1 Oct 2026). Start new work on a branch from `main`.
 - **App:** plain HTML/CSS/JS, no build. See `CLAUDE.md` for layout, commands and conventions.
 - **Team workflow:** `CLAUDE.md` → "Team workflow". Agents in `.claude/agents/`, skills `/check` and `/spec` in `.claude/skills/`. The main session is project manager and architect; it delegates and reviews.
 - **Product docs:** `docs/product/vision.md`, `docs/product/backlog.md` (numbered, MoSCoW, status), `docs/product/specs/`.
