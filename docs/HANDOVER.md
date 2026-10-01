@@ -29,9 +29,9 @@ Full decisions: `docs/product/vision.md` (section "Decisions from the user").
 |---|---|---|
 | 1 | Answer history per topic, `seen`, per-topic exam scores, three-way exam date (not planned / month / precise), honesty note on the result | **done** (AC-1…9) |
 | 2 | Result per topic, change since last mock, "Oefen zwakke onderwerpen", same-day mistake practice | **done** (AC-10…16) |
-| 3 | Plan from the exam date, daily target in minutes, readiness ("Klaar volgens deze app") | **approved, not started** (AC-17…34) |
+| 3 | Plan from the exam date, daily target in minutes, readiness ("Klaar volgens deze app") | **done** (AC-17…35) |
 
-Design proposals: `docs/product/specs/exam-ready-loop-part1-design.md`, `…-part2-design.md`. Part 3 has no design yet.
+Design proposals: `docs/product/specs/exam-ready-loop-part1-design.md`, `…-part2-design.md`, `…-part3-design.md` (its "Decided" section holds the Part 3 design choices: literal "Bijna", "Welkom terug." after a missed day, "Oefen <onderwerp>" max 15, 44-vs-46 line).
 
 **User decisions for Part 3** (in the spec's "Decided" section):
 - Readiness eis 1: the **last 3 mock exams all ≥ 46/50** (no 7-day window, no higher margin).
@@ -46,21 +46,18 @@ Design proposals: `docs/product/specs/exam-ready-loop-part1-design.md`, `…-par
 - Store hardening partly done (prototype-key guards everywhere, exam and mistake fields validated, impossible dates rejected); the rest of backlog #18 is open.
 - Light-mode green contrast fixed (part of #24).
 
-**Checks:** `/check` green at commit `a114b06`: validate OK, logic tests OK (including a `TZ=Europe/Amsterdam` rerun), smoke 242/242. The smoke test takes about 60 s.
+**Checks:** `/check` green after the Part 3 review fixes: validate OK, logic tests OK (including a `TZ=Europe/Amsterdam` rerun), smoke 303/303 (about 60 s).
+
+**Part 3 notes:** plan and readiness logic are pure functions in `js/util.js` (`dayPlan`, `planRules`, `readiness`, `todayStatus`, `replanToday`, `extraRound`, `oldPractice`, `topicPractice`, `freshFirst`). New store fields `today` and `practisedDay` ("gedaan" = first answer per question per day outside a mock). Backlog #5 and #6 are `done`.
 
 ## Next step
 
-Build **Part 3** with the team, in this order:
-1. `ui-ux-designer`: design proposal for Part 3 (start page: target line with minutes, readiness block with action buttons; month maintenance mode). Write it to `docs/product/specs/exam-ready-loop-part3-design.md`.
-2. `frontend-developer`: implement AC-17…34 (+ AC-35). The `today` field in the spec's Data section is new. Keep plan and readiness logic DOM-free in `js/util.js`/`js/store.js`.
-3. `test-engineer` → `ponytail` → `code-reviewer` → fixes → `/check` → commit, mark backlog #5 and #6 `done`.
-
-After that, by backlog priority: #7 hazard perception with still scenes (L), #8 CBR-style distractors, #10/#11 more crossings and signs, #17 export/import.
+By backlog priority: #7 hazard perception with still scenes (L), #8 CBR-style distractors, #10/#11 more crossings and signs, #17 export/import. Start with `product-strategist` or `/spec` for the next item.
 
 ## Things to know
 
 - **Blocked sites:** cbr.nl and wetten.overheid.nl are blocked by the proxy. For law texts use the CC0 copy at `github.com/Apolloccrypt/wetgeving-nl` (RVV 1990, 1 July 2026) and `statengeneraal/laws-markdown` for bijlage I. For CBR use search results restricted to cbr.nl.
-- **Bump `CACHE` in `sw.js`** after changing any file the app loads. The current value has the form `theorie-b-2026-10-01d`.
+- **Bump `CACHE` in `sw.js`** after changing any file the app loads. The current value is `theorie-b-2026-10-01h`.
 - **Commit as you go:** a stop hook asks to commit and push uncommitted changes. While a subagent is still editing, commit only the files it has finished with.
 - **Agents:** the custom agent types (`frontend-developer`, `test-engineer`, …) are available as subagent types from session start.
 - **Bash approvals** sometimes fail with "classifier gave no verdict"; retry, or use Read/Edit/Write meanwhile.

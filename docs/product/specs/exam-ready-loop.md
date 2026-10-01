@@ -1,6 +1,6 @@
 # Spec: Exam-ready loop
 
-- **Status:** approved (30 September 2026). Part 1 done (30 September 2026); Part 2 done (1 October 2026); Part 3 to build.
+- **Status:** approved (30 September 2026). Part 1 done (30 September 2026); Part 2 done (1 October 2026); Part 3 done (1 October 2026).
 - **Priority:** Must
 - **Related:** backlog #3, #4, #5, #6 (combined here); #9 rides along (AC-6); overlaps #18 (store hardening, only for the fields this spec reads). Vision: [success measures](../vision.md#success-measures). Backlog #1–#2 (exam format, content fixes) are `done`, so "trust the content first" is satisfied.
 
@@ -111,7 +111,8 @@ Start page: date choice, target line with minutes, readiness block with action b
   exams: [{ date: 1790000000000, score: 43, total: 50, passed: false, timeUp: false,
             topics: { voorrang: [4, 6] } }],        // topics new (Part 1), optional
   mistakes: { 'k-alarm': { last: 1790000000000, streak: 1, okDay: '2026-09-29', … } },  // existing; `last` used for ordering
-  today: { day: '2026-09-30', target: 30, mock: true, practised: 12 }   // new (Part 3)
+  today: { day: '2026-09-30', target: 30, mock: true, practised: 12 },  // new (Part 3)
+  practisedDay: { day: '2026-09-30', ids: { 'v-3': true } } | null   // new (Part 3, from tests): first answer per question per day outside a mock (AC-27)
 }
 ```
 
@@ -121,7 +122,8 @@ Start page: date choice, target line with minutes, readiness block with action b
 - `seen`: object with the same key guard; values must be a valid day; drop others.
 - `exams`: finite `date`, integers 0 ≤ `score` ≤ `total` ≤ 50; `topics` optional, each value `[goed, gevraagd]` integers with 0 ≤ goed ≤ gevraagd; drop a bad `topics` but keep the exam.
 - `mistakes[id].last`: finite number or dropped.
-- `today`: valid `day`, non-negative integers `target`, `practised`, boolean `mock`; otherwise null (recomputed).
+- `today`: valid `day`, integers 0 ≤ `target`, `practised` ≤ 1000, boolean `mock`; otherwise null (recomputed). `practised` is at least the number of ids in `practisedDay` for the same day.
+- `practisedDay`: valid `day`, `ids` a plain object with the same key guard and values exactly `true`; otherwise null.
 - Version 2 migrates by adding the new fields empty; no data is lost.
 
 ## Scope
