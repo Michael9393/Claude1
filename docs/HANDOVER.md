@@ -14,7 +14,8 @@ Full decisions: `docs/product/vision.md` (section "Decisions from the user").
 
 ## Where things are
 
-- **Branch:** `claude/product-team-review-mp0d52` (all work is here, pushed, not merged; no PR opened).
+- **Branch:** all work is merged into `main` (PR #2 and #3, 1 Oct 2026). Start new work on a fresh branch from `main`.
+- **Live app:** GitHub Pages from `main` (Settings → Pages → "Deploy from a branch", `main`, `/ (root)`), at `https://michael9393.github.io/Claude1/`. Not verified by Claude whether Pages is switched on; ask the owner if it matters.
 - **App:** plain HTML/CSS/JS, no build. See `CLAUDE.md` for layout, commands and conventions.
 - **Team workflow:** `CLAUDE.md` → "Team workflow". Agents in `.claude/agents/`, skills `/check` and `/spec` in `.claude/skills/`. The main session is project manager and architect; it delegates and reviews.
 - **Product docs:** `docs/product/vision.md`, `docs/product/backlog.md` (numbered, MoSCoW, status), `docs/product/specs/`.
@@ -46,13 +47,17 @@ Design proposals: `docs/product/specs/exam-ready-loop-part1-design.md`, `…-par
 - Store hardening partly done (prototype-key guards everywhere, exam and mistake fields validated, impossible dates rejected); the rest of backlog #18 is open.
 - Light-mode green contrast fixed (part of #24).
 
-**Checks:** `/check` green after the Part 3 review fixes: validate OK, logic tests OK (including a `TZ=Europe/Amsterdam` rerun), smoke 303/303 (about 60 s).
+**Checks:** `/check` green on `main` after the Part 3 review fixes: validate OK, logic tests OK (including a `TZ=Europe/Amsterdam` rerun), smoke 303/303 (about 60 s).
 
 **Part 3 notes:** plan and readiness logic are pure functions in `js/util.js` (`dayPlan`, `planRules`, `readiness`, `todayStatus`, `replanToday`, `extraRound`, `oldPractice`, `topicPractice`, `freshFirst`). New store fields `today` and `practisedDay` ("gedaan" = first answer per question per day outside a mock). Backlog #5 and #6 are `done`.
 
+**Part 3 review leftovers (not done, low value):** ponytail's proposals to share a per-day id helper in `store.js`, a shared list-reset CSS class, and dropping `dayPlan().nulmeting` (only tests read it). The page-bottom note still repeats the gevaarherkenning text (decided: keep for now).
+
 ## Next step
 
-By backlog priority: #7 hazard perception with still scenes (L), #8 CBR-style distractors, #10/#11 more crossings and signs, #17 export/import. Start with `product-strategist` or `/spec` for the next item.
+1. **Owner:** start using the app daily on the phone; set the exam date (or "november") so the plan works. Feedback from real use goes before new features.
+2. **Next feature, by backlog priority:** #7 hazard perception with still SVG scenes ("remmen / gas los / niets", timed; Must, size L). It needs a spec first: run `/spec` (requirements-analyst drafts, user-advocate critiques), get the owner's answers and approval, then the Build steps from `CLAUDE.md`.
+3. **After that:** #8 CBR-style distractors, #10/#11 more crossings and signs, #17 export/import (backup), the rest of #18 store hardening.
 
 ## Things to know
 
