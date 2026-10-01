@@ -197,8 +197,7 @@ h3 { margin: 12px 0 6px; font-size: 1.05rem; }
 .tabel .getal { white-space: nowrap; font-weight: 700; }
 /* Getallen op één regel; de naamkolom neemt de rest en loopt door op smalle schermen. */
 .tabel .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; width: 1%; }
-.zwak-regel { overflow-wrap: anywhere; }
-.onderwerpen td:first-child { overflow-wrap: anywhere; }
+.zwak-regel, .onderwerpen td:first-child { overflow-wrap: anywhere; }
 details summary { cursor: pointer; font-weight: 600; }
 .score { font-size: 1.6rem; font-weight: 800; margin: 4px 0 8px; }
 .lijst, .nakijk, .fouten-lijst { padding-left: 20px; }

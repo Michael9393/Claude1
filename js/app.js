@@ -756,7 +756,6 @@
       };
       var weakCount = weak.length ? weakIds().length : 0;
       var weakBtn = weakCount ? '<button class="knop" data-act="zwak">Oefen zwakke onderwerpen (' + weakCount + ')</button>' : '';
-      var weakNames = weak.map(topicName);
 
       main.innerHTML = '<section class="kaart"><h1 tabindex="-1">Uitslag: ' + (passed ? '<span class="status goed">Geslaagd</span>' : '<span class="status fout">Gezakt</span>') + '</h1>' +
         '<p class="score">' + score + ' / ' + list.length + ' goed</p>' +
@@ -764,7 +763,7 @@
         '<p>' + (passed ? 'Je had er ' + EXAM.pass + ' nodig. Goed bezig!' : 'Je had er ' + EXAM.pass + ' nodig, dus nog ' + (EXAM.pass - score) + ' meer. Kijk je fouten na en probeer het nog eens.') + '</p>' +
         '<p class="noot">Gevaarherkenning en vragen met foto\'s zitten niet in dit proefexamen. Een voldoende hier is dus geen garantie voor het echte examen.</p>' +
         (timeUp ? '<p class="fout-tekst">De tijd was om. ' + skipped + ' ' + (skipped === 1 ? 'vraag telt' : 'vragen tellen') + ' als fout.</p>' : '<p class="klein">Tijd: ongeveer ' + mins + ' van de ' + EXAM.minutes + ' minuten.</p>') +
-        (weakCount ? '<p class="zwak-regel">' + esc('Je fouten zaten ' + (rows.filter(function (r) { return r.wrong > 0; }).length > 3 ? 'vooral ' : '') + 'bij ' + U.joinNames(weakNames) + '.') + '</p>' +
+        (weakCount ? '<p class="zwak-regel">' + esc('Je fouten zaten ' + (rows.filter(function (r) { return r.wrong > 0; }).length > 3 ? 'vooral ' : '') + 'bij ' + U.joinNames(weak.map(topicName)) + '.') + '</p>' +
           '<div class="rij">' + weakBtn + '</div>' +
           '<p class="klein">Kijk eerst je fouten na (hieronder). Deze uitslag kun je later niet meer openen.</p>' : '') +
         '</section>' +
@@ -815,9 +814,8 @@
     ids.forEach(function (id) {
       var m = st.mistakes[id];
       var t = items[id].topic;
-      byTopic[t] = byTopic[t] || { open: 0, total: 0, ids: [] };
+      byTopic[t] = byTopic[t] || { total: 0, ids: [] };
       byTopic[t].total += m.count;
-      if (!m.resolved) byTopic[t].open++;
       if (!m.resolved) byTopic[t].ids.push(id);
     });
     var topics = Object.keys(byTopic).sort(function (a, b) { return byTopic[b].total - byTopic[a].total; });
@@ -838,7 +836,7 @@
         var b = byTopic[t];
         return '<div class="balk-rij"><span class="naam">' + esc(topicName(t)) + '</span>' +
           '<span class="balk" aria-hidden="true"><span style="width:' + pct(b.total, max) + '%"></span></span>' +
-          '<span class="aantal">' + b.total + '× fout · ' + b.open + ' open</span>' +
+          '<span class="aantal">' + b.total + '× fout · ' + b.ids.length + ' open</span>' +
           '<button class="knop klein secundair" data-topic="' + esc(t) + '"' + (b.ids.length ? '' : ' disabled') + '>Oefen</button></div>';
       }).join('') + '</div></section>' +
       (recent.length ? '<section class="kaart"><h2>Open fouten</h2><ul class="fouten-lijst">' + recent.map(function (id) {

@@ -103,8 +103,8 @@
   function topicRows(topics, name) {
     var nm = name || String;
     return Object.keys(topics || {}).map(function (t) {
-      var v = topics[t];
-      return { topic: t, name: String(nm(t)), ok: Number(v[0]), asked: Number(v[1]), wrong: Number(v[1]) - Number(v[0]) };
+      var ok = Number(topics[t][0]), asked = Number(topics[t][1]);
+      return { topic: t, name: String(nm(t)), ok: ok, asked: asked, wrong: asked - ok };
     }).sort(function (a, b) {
       return b.wrong - a.wrong || b.asked - a.asked || a.name.localeCompare(b.name, 'nl');
     });
@@ -130,24 +130,19 @@
   // o.examIds: { id: true } in dit examen; die (niet goed beantwoord) komen na de fouten eerst.
   // Volgorde: eerst de open fouten uit die onderwerpen, dan andere vragen daaruit die niet goed waren in het examen.
   function weakList(o) {
-    var max = o.max || 15;
-    var topic = {};
-    var inTopics = {};
+    var topic = {}, inTopics = {}, picked = {};
     (o.topics || []).forEach(function (t) { inTopics[t] = true; });
     o.items.forEach(function (x) { topic[x.id] = x.topic; });
     var hasOwn = function (obj, k) { return !!obj && Object.prototype.hasOwnProperty.call(obj, k); };
-    var picked = {};
-    var out = [];
-    (o.open || []).forEach(function (id) {
-      if (hasOwn(topic, id) && inTopics[topic[id]] === true && !picked[id]) { picked[id] = true; out.push(id); }
+    var out = (o.open || []).filter(function (id) {
+      return hasOwn(topic, id) && inTopics[topic[id]] === true && !picked[id] && (picked[id] = true);
     });
     var rest = o.items.filter(function (x) {
       return inTopics[x.topic] === true && !picked[x.id] && !hasOwn(o.okIds, x.id);
     });
-    var fromExam = rest.filter(function (x) { return hasOwn(o.examIds, x.id); });
-    var other = rest.filter(function (x) { return !hasOwn(o.examIds, x.id); });
-    fromExam.concat(other).forEach(function (x) { out.push(x.id); });
-    return out.slice(0, max);
+    var inExam = function (x) { return hasOwn(o.examIds, x.id); };
+    var ids = function (x) { return x.id; };
+    return out.concat(rest.filter(inExam).map(ids), rest.filter(function (x) { return !inExam(x); }).map(ids)).slice(0, o.max || 15);
   }
 
   // "Voorrang", "Voorrang en Snelheid", "Borden, Voorrang en Snelheid".
