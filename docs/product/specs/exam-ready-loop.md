@@ -1,6 +1,6 @@
 # Spec: Exam-ready loop
 
-- **Status:** approved (30 September 2026). Part 1 done (30 September 2026); Parts 2 and 3 to build.
+- **Status:** approved (30 September 2026). Part 1 done (30 September 2026); Part 2 done (1 October 2026); Part 3 to build.
 - **Priority:** Must
 - **Related:** backlog #3, #4, #5, #6 (combined here); #9 rides along (AC-6); overlaps #18 (store hardening, only for the fields this spec reads). Vision: [success measures](../vision.md#success-measures). Backlog #1–#2 (exam format, content fixes) are `done`, so "trust the content first" is satisfied.
 

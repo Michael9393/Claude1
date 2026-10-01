@@ -264,7 +264,7 @@
       });
     }
     function summary() {
-      main.innerHTML = '<section class="kaart"><h1>' + esc(title) + ': klaar</h1>' +
+      main.innerHTML = '<section class="kaart"><h1 tabindex="-1">' + esc(title) + ': klaar</h1>' +
         '<p class="score">' + score + ' / ' + list.length + ' goed (' + pct(score, list.length) + '%)</p>' +
         (wrong.length ? '<p>Deze vragen staan nu in je <a href="#/fouten">foutenlogboek</a>:</p><ul class="lijst">' +
           wrong.map(function (w) { return '<li>' + esc(itemLabel(w)) + '</li>'; }).join('') + '</ul>' : '<p>Alles goed. Mooi!</p>') +
@@ -272,6 +272,8 @@
         '<div class="rij">' + (again ? '<button class="knop" data-act="opnieuw">' + esc(opts.againLabel || 'Nog een ronde') + '</button>' : '') +
         '<a class="knop secundair" href="#/start">Naar start</a></div></section>';
       if (again) main.querySelector('[data-act=opnieuw]').onclick = again;
+      // De knop "Volgende" bestaat niet meer: focus op de kop van de samenvatting.
+      main.querySelector('h1').focus();
     }
     next();
   }
@@ -774,8 +776,8 @@
         }).join('') + '</tbody></table>' +
         (timeUp ? '<p class="klein">Vragen die je niet op tijd hebt beantwoord, tellen hier als fout.</p>' : '') +
         '</section>' +
-        '<section class="kaart">' +
-        (wrong.length ? '<h2>Nakijken</h2><ol class="nakijk">' + wrong.map(function (a) {
+        '<section class="kaart"><h2>Nakijken</h2>' +
+        (wrong.length ? '<ol class="nakijk">' + wrong.map(function (a) {
           return '<li><p><strong>' + esc(itemLabel(a.item)) + '</strong></p>' +
             (a.item.kind === 'voorrang' ? '<div class="kruispunt-wrap klein-kruispunt">' + RB.renderIntersection(a.item.scenario, a.item.scenario.order, { still: true }) + '</div>' : '') +
             '<p>Jouw antwoord: <span class="fout-tekst">' + esc(a.given) + '</span><br>Juist: <span class="goed-tekst">' + esc(correctText(a.item)) + '</span></p>' +

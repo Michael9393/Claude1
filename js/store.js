@@ -35,7 +35,17 @@
     s.srs = eachValid(raw.srs, function (c) { return isObj(c) && typeof c.box === 'number' && typeof c.due === 'number'; });
     s.mistakes = eachValid(raw.mistakes, function (m) { return isObj(m) && typeof m.count === 'number'; });
     s.done = eachValid(raw.done, function (v) { return typeof v === 'boolean'; });
-    Object.keys(s.mistakes).forEach(function (id) { if (!isNum(s.mistakes[id].last)) delete s.mistakes[id].last; });
+    // Velden van een fout gelijk trekken: wat niet precies klopt, telt als "nog open, opnieuw beginnen".
+    Object.keys(s.mistakes).forEach(function (id) {
+      var m = s.mistakes[id];
+      if (!isNum(m.last)) delete m.last;
+      m.resolved = m.resolved === true;
+      m.okDay = U.isDay(m.okDay) ? m.okDay : null;
+      if (m.streak === 1 && m.okDay) m.streak = 1;
+      else if (m.streak === 2 && m.resolved) m.streak = 2;
+      else m.streak = 0;
+      if (m.given != null) m.given = String(m.given);
+    });
     s.exams = Array.isArray(raw.exams) ? raw.exams.map(cleanExam).filter(Boolean) : [];
     if (isObj(raw.stats)) s.stats = { answered: num(raw.stats.answered), correct: num(raw.stats.correct) };
     if (U.isDay(raw.examDate)) s.examDate = raw.examDate;

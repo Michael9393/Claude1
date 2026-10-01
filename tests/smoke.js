@@ -554,6 +554,7 @@ async function part2(browser, base) {
     check('AC-10: sorted by most wrong first', nums.every((n, i) => !i || nums[i - 1].wrong >= n.wrong), JSON.stringify(rows));
     check('AC-10: table headers have scope=col', await p.$$eval('table.onderwerpen th', (t) => t.length === 3 && t.every((x) => x.getAttribute('scope') === 'col')));
     check('time-up footnote under the table', /Vragen die je niet op tijd hebt beantwoord, tellen hier als fout\./.test(text));
+    check('time-up with 0 answered: "Nakijken" heading is there', await p.evaluate(() => [...document.querySelectorAll('main h2')].some((h) => h.textContent === 'Nakijken')));
     check('time-up with 0 answered: no "Alles goed!"', !/Alles goed!/.test(text) && /Je hebt geen vragen fout beantwoord, maar niet alle vragen op tijd gedaan\./.test(text));
     const weakNames = rows.slice(0, 3).map((r) => r[0]);
     check('AC-12: weak line names the top 3 topics', text.includes('Je fouten zaten vooral bij ' + weakNames[0] + ', ' + weakNames[1] + ' en ' + weakNames[2] + '.'), weakNames.join('|'));
@@ -721,6 +722,7 @@ async function part2Edge(browser, base) {
     check('AC-12: 0 wrong: no weak-topic line', (await weakLine(p).count()) === 0);
     check('AC-12: 0 wrong: no "Kijk eerst je fouten na" hint', !/Kijk eerst je fouten na/.test(text));
     check('0 wrong: "Alles goed!" in Nakijken', /Alles goed!/.test(text));
+    check('0 wrong: third card still starts with the "Nakijken" heading', await p.evaluate(() => { const c = document.querySelectorAll('main section.kaart')[2]; return !!c && c.firstElementChild.tagName === 'H2' && c.firstElementChild.textContent === 'Nakijken' && /Alles goed!/.test(c.textContent); }));
     check('0 wrong: "Nieuw proefexamen" is the primary button', await p.getByRole('button', { name: 'Nieuw proefexamen' }).evaluate((b) => !b.classList.contains('secundair')));
     const rows0 = await tableRows(p);
     check('AC-10: 0 wrong: every topic listed with fout 0, sorted by asked then Dutch name', JSON.stringify(rows0) === JSON.stringify(expectedRows(tally(ans), names)), JSON.stringify(rows0));
@@ -755,6 +757,7 @@ async function part2Edge(browser, base) {
     check('AC-12: 1 weak topic: nothing that was right in this exam', seen1.every((a) => !okIds.has(a.id)));
     check('AC-12: 1 weak topic: no duplicates', new Set(seen1.map((a) => a.id)).size === seen1.length);
     check('AC-12: weak session summary heading', /Zwakke onderwerpen: klaar/.test(await p.textContent('h1')));
+    check('session summary: focus on the summary heading after the last "Volgende"', await p.evaluate(() => document.activeElement.tagName === 'H1' && document.activeElement.getAttribute('tabindex') === '-1' && /: klaar$/.test(document.activeElement.textContent)));
     check('AC-12/14: the mistake answered right in the weak session stays open (same day)', await readState(p).then((s) => s.mistakes[wrongId] && !s.mistakes[wrongId].resolved && s.mistakes[wrongId].streak === 1));
     await p.getByRole('button', { name: 'Nog een ronde' }).click();
     const again = await p.evaluate(() => window.__q.id());

@@ -553,7 +553,7 @@ test('migratie v2 → v3: srs, done, stats, fouten (streak/okDay) en examens bli
   const st = RB.store.state();
   same(st.srs, v2.srs);
   same(st.done, v2.done);
-  same(st.mistakes, v2.mistakes);
+  same(st.mistakes, { 'k-alarm': Object.assign({}, v2.mistakes['k-alarm'], { resolved: false }) });
   same(st.stats, v2.stats);
   assert.strictEqual(st.exams.length, 2);
   same(st.exams[0], { date: 1, passed: false, timeUp: true, score: 40, total: 50 });
@@ -933,6 +933,48 @@ test('AC-14/15: streak en okDay overleven opslaan en opnieuw laden', () => {
   assert.ok(again.store.okToday('k-test'));
   again.store.recordAnswer(item, true);
   assert.ok(!again.store.state().mistakes['k-test'].resolved, 'na herladen nog steeds dezelfde dag');
+});
+test('clean: streak "x" met okDay telt als streak 0; één goed antwoord lost de fout niet op (AC-14)', () => {
+  const { RB } = load({ version: 3, mistakes: { 'k-test': { count: 1, streak: 'x', okDay: '2026-09-01' } } });
+  const s = RB.store;
+  s.recordAnswer(item, true);
+  const m = s.state().mistakes['k-test'];
+  assert.ok(!m.resolved);
+  assert.strictEqual(m.streak, 1);
+  assert.strictEqual(m.okDay, '2026-09-28');
+  assert.deepStrictEqual(s.openMistakes(), ['k-test']);
+});
+test('clean: streak 1 zonder geldige okDay telt als streak 0', () => {
+  for (const okDay of [undefined, null, 7, '2026-13-01']) {
+    const { RB } = load({ version: 3, mistakes: { 'k-test': { count: 1, streak: 1, okDay } } });
+    RB.store.recordAnswer(item, true);
+    assert.ok(!RB.store.state().mistakes['k-test'].resolved, String(okDay));
+  }
+});
+test('clean: resolved "false" (string) blijft een open fout', () => {
+  const { RB } = load({ version: 3, mistakes: { 'k-test': { count: 1, resolved: 'false' } } });
+  assert.strictEqual(RB.store.state().mistakes['k-test'].resolved, false);
+  assert.deepStrictEqual(RB.store.openMistakes(), ['k-test']);
+});
+test('clean: een geldige opgeloste fout blijft opgelost; streak 2 zonder resolved wordt 0', () => {
+  const { RB } = load({ version: 3, mistakes: {
+    a: { count: 2, streak: 2, okDay: '2026-09-20', resolved: true, given: 3 },
+    b: { count: 1, streak: 2, okDay: '2026-09-20' }
+  } });
+  const st = RB.store.state();
+  assert.strictEqual(st.mistakes.a.resolved, true);
+  assert.strictEqual(st.mistakes.a.streak, 2);
+  assert.strictEqual(st.mistakes.a.given, '3');
+  assert.strictEqual(st.mistakes.b.streak, 0);
+  assert.deepStrictEqual(RB.store.openMistakes(), ['b']);
+});
+test('clean: geldige streak 1 van gisteren lost op met één goed antwoord vandaag', () => {
+  const { RB } = load({ version: 3, mistakes: { 'k-test': { count: 1, streak: 1, okDay: '2026-09-27', resolved: false } } });
+  RB.store.recordAnswer(item, true);
+  const m = RB.store.state().mistakes['k-test'];
+  assert.ok(m.resolved);
+  assert.strictEqual(m.streak, 2);
+  assert.deepStrictEqual(RB.store.openMistakes(), []);
 });
 
 // Contrast (WCAG): --good moet 4,5:1 halen op wit, op --good-bg en als achtergrond voor witte knoptekst.
