@@ -714,6 +714,259 @@ test('AC-14/15: goed vandaag blijft open; nog eens goed vandaag ook; fout zet st
   assert.ok(m.resolved, 'goed op een latere dag: opgelost');
 });
 
+// ---------- Deel 2: randgevallen (test-engineer) ----------
+test('AC-10: bij gelijk aantal fout gaat meer gevraagd vóór de naam', () => {
+  const { topicRows } = load().RB.util;
+  // Beide 2 fout; Voorrang heeft 6 gevraagd, Alcohol 2: Voorrang eerst ondanks de naam.
+  same(topicRows({ alcohol: [0, 2], voorrang: [4, 6] }, nameOf).map((r) => r.topic), ['voorrang', 'alcohol']);
+});
+test('AC-10: sorteren op de getoonde naam, niet op de sleutel', () => {
+  const { topicRows } = load().RB.util;
+  const names = { z: 'Alcohol', a: 'Borden' };
+  same(topicRows({ a: [1, 2], z: [1, 2] }, (t) => names[t]).map((r) => r.topic), ['z', 'a']);
+});
+test('AC-10: naam sorteert Nederlands: hoofdletters en accenten niet eerst', () => {
+  const { topicRows } = load().RB.util;
+  const names = { v: 'Voorrang', a: 'alcohol', e: 'Één richting', f: 'Fietsers', i: 'ijs', j: 'Jongeren' };
+  const rows = topicRows({ v: [1, 2], a: [1, 2], e: [1, 2], f: [1, 2], i: [1, 2], j: [1, 2] }, (t) => names[t]);
+  same(rows.map((r) => r.name), ['alcohol', 'Één richting', 'Fietsers', 'ijs', 'Jongeren', 'Voorrang']);
+});
+test('AC-10: onderwerpen met 0 fout staan er ook in, achteraan, op gevraagd en naam', () => {
+  const { topicRows } = load().RB.util;
+  const rows = topicRows({ kennis: [19, 19], borden: [7, 7], snelheid: [3, 4], alcohol: [7, 7] }, nameOf);
+  same(rows.map((r) => [r.topic, r.wrong]), [['snelheid', 1], ['kennis', 0], ['alcohol', 0], ['borden', 0]]);
+});
+test('AC-10: onderwerp zonder naam toont de sleutel', () => {
+  const { topicRows } = load().RB.util;
+  same(topicRows({ onbekend: [0, 1] }, nameOf).map((r) => r.name), ['onbekend']);
+});
+test('AC-10/AC-5: open vragen bij tijd-om tellen als fout in de rijen en tellen op tot 50', () => {
+  const { tallyTopics, topicRows } = load().RB.util;
+  // 50 vragen, 3 beantwoord (2 goed), de rest open.
+  const list = [];
+  for (let i = 0; i < 50; i++) list.push({ topic: ['voorrang', 'borden', 'kennis'][i % 3], ok: i < 3 && i !== 1 });
+  const rows = topicRows(tallyTopics(list), nameOf);
+  assert.strictEqual(rows.reduce((a, r) => a + r.asked, 0), 50);
+  assert.strictEqual(rows.reduce((a, r) => a + r.ok, 0), 2);
+  assert.strictEqual(rows.reduce((a, r) => a + r.wrong, 0), 48);
+});
+test('AC-12: zwakke onderwerpen: gelijke stand op plek 3/4 volgt de AC-10-sortering', () => {
+  const { topicRows, weakTopics } = load().RB.util;
+  const rows = topicRows({ a: [0, 4], b: [2, 4], c: [1, 3], d: [3, 5], e: [0, 1] }, (t) => t);
+  // fout: a4, b2, c2, d2, e1 → a, dan b/d (4 en 5 gevraagd → d eerst), dan b.
+  same(weakTopics(rows), ['a', 'd', 'b']);
+});
+test('AC-12: met fout in 1 of 2 onderwerpen zijn er maar 1 of 2 zwakke', () => {
+  const { topicRows, weakTopics } = load().RB.util;
+  same(weakTopics(topicRows({ a: [3, 3], b: [1, 3] })), ['b']);
+  same(weakTopics(topicRows({ a: [2, 3], b: [1, 3], c: [3, 3] })), ['b', 'a']);
+});
+test('AC-11: verschil +n en -n met ASCII-min, ook vanaf 0 en tot 50', () => {
+  const { changeLine } = load().RB.util;
+  assert.strictEqual(changeLine({ score: 0, total: 50 }, { score: 50, total: 50 }), '+50 sinds vorige: 0 / 50');
+  assert.strictEqual(changeLine({ score: 50, total: 50 }, { score: 0, total: 50 }), '-50 sinds vorige: 50 / 50');
+  assert.strictEqual(changeLine({ score: 44, total: 50 }, { score: 43, total: 50 }), '-1 sinds vorige: 44 / 50');
+  assert.ok(!/−/.test(changeLine({ score: 44, total: 50 }, { score: 43, total: 50 })), 'geen Unicode-min');
+});
+test('AC-11: vorig examen dat op tijd-om eindigde telt gewoon mee', () => {
+  const { changeLine } = load().RB.util;
+  assert.strictEqual(changeLine({ score: 3, total: 50, timeUp: true }, { score: 40, total: 50 }), '+37 sinds vorige: 3 / 50');
+});
+test('AC-11: oud formaat met kennis/inzicht en topics geeft geen regel', () => {
+  const { changeLine } = load().RB.util;
+  assert.strictEqual(changeLine({ kennis: 30, inzicht: 14, passed: true, date: 1 }, { score: 44, total: 50 }), null);
+  assert.strictEqual(changeLine(null, { score: 44, total: 50 }), null);
+});
+test('AC-11/AC-35: vorig examen na clean(): oud formaat blijft zonder regel, kapot examen valt weg', () => {
+  const { RB } = load({ version: 3, exams: [
+    { date: 1, score: 40, total: 50 },
+    { date: 2, score: 60, total: 50 } // kapot: valt weg, dus 40 / 50 is het vorige
+  ] });
+  const ex = RB.store.state().exams;
+  assert.strictEqual(RB.util.changeLine(ex[ex.length - 1], { score: 43, total: 50 }), '+3 sinds vorige: 40 / 50');
+  const old = load({ version: 3, exams: [{ date: 1, score: 40, total: 50 }, { date: 2, kennis: 11, inzicht: 26, passed: true }] }).RB;
+  const ex2 = old.store.state().exams;
+  assert.strictEqual(old.util.changeLine(ex2[ex2.length - 1], { score: 43, total: 50 }), null, 'het nieuwste is oud formaat: geen regel');
+});
+test('AC-12: minder dan 15 beschikbaar: alles, zonder dubbele', () => {
+  const { weakList } = load().RB.util;
+  const items = [{ id: 'a1', topic: 'a' }, { id: 'a2', topic: 'a' }, { id: 'a3', topic: 'a' }, { id: 'b1', topic: 'b' }];
+  const list = weakList({ topics: ['a'], items, open: ['a2', 'a2'], okIds: { a3: true }, examIds: { a1: true, a3: true } });
+  same(list, ['a2', 'a1']);
+});
+test('AC-12: meer dan 15 open fouten: precies 15, allemaal fouten, in de opgegeven volgorde', () => {
+  const { weakList } = load().RB.util;
+  const items = [];
+  for (let i = 0; i < 30; i++) items.push({ id: 'a' + i, topic: 'a' });
+  const open = items.slice(0, 20).map((x) => x.id).reverse();
+  const list = weakList({ topics: ['a'], items, open, okIds: {}, examIds: { a25: true } });
+  same(list, open.slice(0, 15));
+});
+test('AC-12: een open fout die in dit examen goed was, blijft een open fout en komt eerst', () => {
+  const { weakList } = load().RB.util;
+  const items = [{ id: 'a1', topic: 'a' }, { id: 'a2', topic: 'a' }];
+  same(weakList({ topics: ['a'], items, open: ['a1'], okIds: { a1: true }, examIds: { a1: true, a2: true } }), ['a1', 'a2']);
+});
+test('AC-12: open vragen bij tijd-om (in examen, niet goed) komen vóór vragen buiten het examen', () => {
+  const { weakList } = load().RB.util;
+  const items = [{ id: 'x1', topic: 'a' }, { id: 'x2', topic: 'a' }, { id: 'open', topic: 'a' }, { id: 'goed', topic: 'a' }];
+  same(weakList({ topics: ['a'], items, open: [], okIds: { goed: true }, examIds: { open: true, goed: true } }), ['open', 'x1', 'x2']);
+});
+test('AC-12: open fouten uit andere onderwerpen en van verwijderde vragen doen niet mee', () => {
+  const { weakList } = load().RB.util;
+  const items = [{ id: 'a1', topic: 'a' }, { id: 'b1', topic: 'b' }];
+  same(weakList({ topics: ['a'], items, open: ['b1', 'weg', 'a1'] }), ['a1']);
+});
+test('AC-12: rare id\'s in de open fouten en onderwerp "__proto__" breken de lijst niet', () => {
+  const { weakList } = load().RB.util;
+  const items = [{ id: 'a1', topic: 'a' }, { id: 'b1', topic: 'b' }];
+  same(weakList({ topics: ['a', '__proto__'], items, open: ['__proto__', 'hasOwnProperty', 'constructor', 'a1'], okIds: {}, examIds: {} }), ['a1']);
+  same(weakList({ topics: ['a'], items, open: [], okIds: { a1: true }, examIds: {} }), [], 'goed in examen: niet erin');
+});
+test('AC-12: 0 fout → geen zwakke onderwerpen en een lege lijst (dus geen knop)', () => {
+  const { topicRows, weakTopics, weakList } = load().RB.util;
+  const weak = weakTopics(topicRows({ a: [3, 3], b: [5, 5] }));
+  same(weak, []);
+  same(weakList({ topics: weak, items: [{ id: 'a1', topic: 'a' }], open: ['a1'] }), []);
+});
+test('AC-12: "Nog een ronde" (zelfde invoer, na goed beantwoorden vandaag) bouwt dezelfde fouten eerst op', () => {
+  const { RB } = load();
+  const a = { id: 'a1', topic: 'a' };
+  const b = { id: 'a2', topic: 'a' };
+  RB.store.recordAnswer(a, false);
+  const input = () => ({ topics: ['a'], items: [b, a], open: RB.store.openMistakes(), okIds: {}, examIds: {} });
+  same(RB.util.weakList(input()), ['a1', 'a2']);
+  RB.store.recordAnswer(a, true); // goed in de ronde: nog open (AC-14)
+  same(RB.util.weakList(input()), ['a1', 'a2'], 'de fout staat er nog steeds eerst');
+});
+test('AC-13: regel in het foutenlogboek: 2 van 5 en 5 van 5', () => {
+  const { okTodayLine } = load().RB.util;
+  assert.strictEqual(okTodayLine(2, 5), '2 daarvan had je vandaag al goed. Die zijn pas weg als je ze morgen weer goed hebt.');
+  assert.strictEqual(okTodayLine(5, 5), 'Die had je vandaag allemaal al goed. Ze zijn pas weg als je ze morgen weer goed hebt.');
+});
+test('AC-13: okToday telt alleen open fouten met streak en okDay vandaag', () => {
+  const { RB, clock } = load();
+  const s = RB.store;
+  s.recordAnswer(item, false);
+  assert.ok(!s.okToday('k-test'), 'net fout: niet vandaag goed');
+  s.recordAnswer(item, true);
+  assert.ok(s.okToday('k-test'));
+  assert.deepStrictEqual(s.openMistakes(), ['k-test'], 'telt mee als open fout (knop "Oefen mijn fouten")');
+  clock.now += 24 * HOUR;
+  assert.ok(!s.okToday('k-test'), 'de volgende dag niet meer');
+  assert.ok(!s.okToday('bestaat-niet'));
+});
+test('AC-13/AC-35: fout met kapotte okDay of streak is niet "vandaag goed"', () => {
+  const { RB } = load({ version: 3, mistakes: {
+    a: { count: 1, streak: 1, okDay: 7 },
+    b: { count: 1, streak: 0, okDay: '2026-09-28' },
+    c: { count: 1 }
+  } });
+  for (const id of ['a', 'b', 'c']) assert.ok(!RB.store.okToday(id), id);
+});
+test('AC-14: goed op dag 1, nog eens goed op dag 1 (ook 23:59) blijft open; goed op dag 2 om 00:00 lost op', () => {
+  const { RB, clock } = load(undefined, at(2026, 9, 30, 8));
+  const s = RB.store;
+  s.recordAnswer(item, false);
+  s.recordAnswer(item, true);
+  clock.now = at(2026, 9, 30, 23, 59);
+  s.recordAnswer(item, true);
+  const m = s.state().mistakes['k-test'];
+  assert.strictEqual(m.streak, 1);
+  assert.strictEqual(m.okDay, '2026-09-30');
+  assert.ok(!m.resolved);
+  clock.now = at(2026, 10, 1, 0, 0);
+  s.recordAnswer(item, true);
+  assert.ok(m.resolved, 'om middernacht is het een nieuwe dag');
+  assert.deepStrictEqual(s.openMistakes(), []);
+});
+test('AC-14: goed gisteren (streak 1, okDay gisteren) en vandaag goed: opgelost', () => {
+  const { RB } = load({ version: 3, mistakes: { 'k-test': { count: 1, streak: 1, okDay: '2026-09-27', last: 1 } } });
+  RB.store.recordAnswer(item, true);
+  assert.ok(RB.store.state().mistakes['k-test'].resolved);
+});
+test('AC-14: een opgeloste fout wordt door goed antwoorden niet heropend', () => {
+  const { RB, clock } = load();
+  const s = RB.store;
+  s.recordAnswer(item, false); s.recordAnswer(item, true);
+  clock.now += 24 * HOUR; s.recordAnswer(item, true);
+  clock.now += 24 * HOUR; s.recordAnswer(item, true);
+  assert.ok(s.state().mistakes['k-test'].resolved);
+  assert.strictEqual(s.state().mistakes['k-test'].streak, 2);
+});
+test('AC-15: fout na goed vandaag: streak 0, okDay null; daarna goed vandaag = weer streak 1, morgen pas weg', () => {
+  const { RB, clock } = load();
+  const s = RB.store;
+  s.recordAnswer(item, false);
+  clock.now += 24 * HOUR;
+  s.recordAnswer(item, true); // streak 1, okDay 29 sep
+  s.recordAnswer(item, false);
+  const m = s.state().mistakes['k-test'];
+  assert.strictEqual(m.streak, 0);
+  assert.strictEqual(m.okDay, null);
+  assert.ok(!m.resolved);
+  assert.ok(!s.okToday('k-test'));
+  s.recordAnswer(item, true);
+  assert.strictEqual(m.streak, 1);
+  assert.ok(!m.resolved, 'zelfde dag: nog niet weg');
+  clock.now += 24 * HOUR;
+  s.recordAnswer(item, true);
+  assert.ok(m.resolved);
+});
+test('AC-15: fout op een opgeloste fout opent hem weer met streak 0', () => {
+  const { RB, clock } = load();
+  const s = RB.store;
+  s.recordAnswer(item, false); s.recordAnswer(item, true);
+  clock.now += 24 * HOUR; s.recordAnswer(item, true);
+  s.recordAnswer(item, false);
+  const m = s.state().mistakes['k-test'];
+  assert.ok(!m.resolved);
+  assert.strictEqual(m.streak, 0);
+  assert.strictEqual(m.okDay, null);
+  assert.strictEqual(m.count, 2);
+});
+test('AC-14/15: streak en okDay overleven opslaan en opnieuw laden', () => {
+  const { RB, data } = load();
+  RB.store.recordAnswer(item, false);
+  RB.store.recordAnswer(item, true);
+  const again = load(data['rijbewijs-b-v1']).RB;
+  assert.ok(again.store.okToday('k-test'));
+  again.store.recordAnswer(item, true);
+  assert.ok(!again.store.state().mistakes['k-test'].resolved, 'na herladen nog steeds dezelfde dag');
+});
+
+// Contrast (WCAG): --good moet 4,5:1 halen op wit, op --good-bg en als achtergrond voor witte knoptekst.
+function cssTokens(dark) {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'style.css'), 'utf8');
+  const block = dark ? /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css)[1] : /:root\s*\{([^}]*)\}/.exec(css)[1];
+  const out = {};
+  block.replace(/--([\w-]+):\s*(#[0-9a-fA-F]{6})/g, (_, k, v) => { out[k] = v; });
+  return out;
+}
+function contrast(a, b) {
+  const lum = (hex) => {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+test('contrast: licht --good #1a7a43 haalt 4,5:1 op wit (--card), op --good-bg en met witte tekst', () => {
+  const t = cssTokens(false);
+  assert.strictEqual(t.good.toLowerCase(), '#1a7a43');
+  for (const [fg, bg] of [[t.good, '#ffffff'], [t.good, t.card], [t.good, t['good-bg']], [t['on-status'], t.good]]) {
+    const r = contrast(fg, bg);
+    assert.ok(r >= 4.5, fg + ' op ' + bg + ': ' + r.toFixed(2) + ':1');
+  }
+});
+test('contrast: donker --good haalt 4,5:1 op --card, op --good-bg en met --on-status', () => {
+  const t = Object.assign(cssTokens(false), cssTokens(true));
+  for (const [fg, bg] of [[t.good, t.card], [t.good, t['good-bg']], [t['on-status'], t.good]]) {
+    const r = contrast(fg, bg);
+    assert.ok(r >= 4.5, fg + ' op ' + bg + ': ' + r.toFixed(2) + ':1');
+  }
+});
+
 if (process.env.TZ === 'Europe/Amsterdam') {
   test('DST: tijdzone Europe/Amsterdam is echt actief', () => {
     assert.notStrictEqual(new Date(2026, 9, 24, 12).getTimezoneOffset(), new Date(2026, 9, 26, 12).getTimezoneOffset());
@@ -743,6 +996,62 @@ if (process.env.TZ === 'Europe/Amsterdam') {
     clock.now = at(2026, 10, 26, 0, 10);
     RB.store.recordAnswer(k, false);
     same(RB.store.state().history.kennis.map((h) => h.day), ['2026-10-25', '2026-10-26']);
+  });
+  test('DST AC-14: goed om 00:30 en 23:30 op de 25-uursdag (25 okt) blijft open; 26 okt 00:10 lost op', () => {
+    const { RB, clock } = load(undefined, at(2026, 10, 24, 20));
+    const s = RB.store;
+    s.recordAnswer(item, false);
+    clock.now = at(2026, 10, 25, 0, 30);
+    s.recordAnswer(item, true);
+    clock.now += 23 * HOUR; // 25 okt 23:30 (wintertijd)
+    assert.strictEqual(new Date(clock.now).getDate(), 25);
+    s.recordAnswer(item, true);
+    const m = s.state().mistakes['k-test'];
+    assert.strictEqual(m.okDay, '2026-10-25');
+    assert.ok(!m.resolved, 'zelfde kalenderdag ondanks 23 uur verschil');
+    assert.ok(s.okToday('k-test'));
+    clock.now = at(2026, 10, 26, 0, 10);
+    assert.ok(!s.okToday('k-test'));
+    s.recordAnswer(item, true);
+    assert.ok(m.resolved);
+  });
+  test('DST AC-14: goed om 23:30 op 24 okt en 00:30 op 25 okt (24 uur + 1 uur verschil) lost op', () => {
+    const { RB, clock } = load(undefined, at(2026, 10, 24, 10));
+    const s = RB.store;
+    s.recordAnswer(item, false);
+    clock.now = at(2026, 10, 24, 23, 30);
+    s.recordAnswer(item, true);
+    clock.now = at(2026, 10, 25, 0, 30);
+    s.recordAnswer(item, true);
+    assert.ok(s.state().mistakes['k-test'].resolved);
+  });
+  test('DST AC-15: fout op 25 okt 23:30 na goed om 00:30 dezelfde dag zet streak 0 en okDay null', () => {
+    const { RB, clock } = load(undefined, at(2026, 10, 24, 20));
+    const s = RB.store;
+    s.recordAnswer(item, false);
+    clock.now = at(2026, 10, 25, 0, 30);
+    s.recordAnswer(item, true);
+    clock.now += 23 * HOUR;
+    s.recordAnswer(item, false);
+    const m = s.state().mistakes['k-test'];
+    assert.strictEqual(m.streak, 0);
+    assert.strictEqual(m.okDay, null);
+    clock.now = at(2026, 10, 26, 0, 10);
+    s.recordAnswer(item, true);
+    assert.ok(!m.resolved, 'na de fout begint het opnieuw');
+  });
+  test('DST AC-14: maart (23-uursdag, 28 mrt 2027): 00:30 en 23:30 dezelfde dag, blijft open', () => {
+    const { RB, clock } = load(undefined, at(2027, 3, 28, 12));
+    const s = RB.store;
+    s.recordAnswer(item, false);
+    clock.now = at(2027, 3, 28, 0, 30);
+    s.recordAnswer(item, true);
+    clock.now = at(2027, 3, 28, 23, 30);
+    s.recordAnswer(item, true);
+    assert.ok(!s.state().mistakes['k-test'].resolved);
+    clock.now = at(2027, 3, 29, 0, 5);
+    s.recordAnswer(item, true);
+    assert.ok(s.state().mistakes['k-test'].resolved);
   });
 } else {
   test('DST: alle logic-tests ook in TZ=Europe/Amsterdam (kindproces)', () => {

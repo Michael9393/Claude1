@@ -247,6 +247,7 @@ async function run(base) {
 
   await part1(browser, base);
   await part2(browser, base);
+  await part2Edge(browser, base);
 
   await page.goto(base);
   check('service worker is active', await page.evaluate(async () => !!(await navigator.serviceWorker.ready).active));
@@ -608,6 +609,366 @@ async function part2(browser, base) {
     await p.reload();
     check('AC-35: broken mistakes: Foutenlogboek renders without label', /Oefen mijn fouten \(1\)/.test(await p.textContent('main')) && !/Vandaag al goed/.test(await p.textContent('main')));
     check('AC-13/16/35: no page errors', errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+}
+
+// ---------- Exam-ready loop, part 2: edge cases (test-engineer) ----------
+// Test helper in the page: recognises the question on screen and answers it right or wrong.
+// Only used to steer which answers are wrong; the checks read the screen by role and text.
+function installOracle() {
+  window.__q = {
+    id: function () {
+      var RB = window.RB, d = document.createElement('div');
+      var bord = document.querySelector('.q .bord.groot');
+      if (bord) {
+        for (var i = 0; i < RB.signs.length; i++) {
+          d.innerHTML = RB.signs[i].svg.replace('role="img"', 'role="img" aria-label="Verkeersbord"');
+          if (d.innerHTML === bord.innerHTML) return 'bord-' + RB.signs[i].id;
+        }
+        return null;
+      }
+      var wrap = document.querySelector('.q .kruispunt-wrap');
+      if (wrap) {
+        for (var j = 0; j < RB.voorrang.length; j++) {
+          d.innerHTML = RB.renderIntersection(RB.voorrang[j], []);
+          if (d.innerHTML === wrap.innerHTML) return RB.voorrang[j].id;
+        }
+        return null;
+      }
+      var p = document.querySelector('.q .prompt').textContent;
+      var q = RB.questions.find(function (x) { return x.q === p; });
+      return q ? q.id : null;
+    },
+    // Answer right (ok) or wrong; in a practice session also go to the next question.
+    answer: function (ok) {
+      var RB = window.RB, id = this.id(), item = RB.items[id];
+      var click = function (el) { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); };
+      var confirm = function () { var b = document.querySelector('.q [data-act=bevestig]'); if (b) click(b); };
+      if (item.kind === 'voorrang') {
+        var order = item.scenario.order.slice();
+        if (!ok) order.push(order.shift());
+        order.forEach(function (v) { click(document.querySelector('.q .voertuig[data-id="' + v + '"]')); });
+        confirm();
+      } else if (item.kind === 'num') {
+        document.querySelector('.q .invul input').value = String(ok ? item.answer : item.answer + 1).replace('.', ',');
+        confirm();
+      } else {
+        var good = item.kind === 'sign' ? item.sign.name : item.options[item.answer];
+        var btns = [].slice.call(document.querySelectorAll('.q .keuze'));
+        click(btns.find(function (b) { return (b.textContent === good) === ok; }));
+        confirm();
+      }
+      var next = document.querySelector('.q [data-act=volgende]');
+      if (next) click(next);
+      return { id: id, topic: item.topic, ok: ok };
+    }
+  };
+}
+
+// Run a whole mock exam; wrongFor(item, k) decides which questions are answered wrong. Returns the answers.
+async function runMock(p, wrongFor) {
+  await p.getByRole('button', { name: /proefexamen/i }).last().click();
+  const out = [];
+  for (let k = 0; k < 50; k++) {
+    await p.locator('.q .vraag').waitFor();
+    const info = await p.evaluate(() => { const id = window.__q.id(); return { id, topic: id && window.RB.items[id].topic }; });
+    if (!info.id) throw new Error('oracle: unknown question ' + k);
+    const wrong = wrongFor(info, k, out);
+    out.push(await p.evaluate((ok) => window.__q.answer(ok), !wrong));
+  }
+  await p.getByRole('heading', { name: /Uitslag/ }).waitFor();
+  return out;
+}
+const tableRows = (p) => p.$$eval('table.onderwerpen tbody tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
+const tally = (answers) => {
+  const t = {};
+  answers.forEach((a) => { t[a.topic] = t[a.topic] || [0, 0]; t[a.topic][1]++; if (a.ok) t[a.topic][0]++; });
+  return t;
+};
+// Expected AC-10 order from a tally, using the names the app shows.
+const expectedRows = (t, names) => Object.keys(t).map((k) => ({ name: names[k] || k, ok: t[k][0], asked: t[k][1], wrong: t[k][1] - t[k][0] }))
+  .sort((a, b) => b.wrong - a.wrong || b.asked - a.asked || a.name.localeCompare(b.name, 'nl'))
+  .map((r) => [r.name, r.ok + ' van ' + r.asked, String(r.wrong)]);
+const weakLine = (p) => p.locator('main p', { hasText: /^Je fouten zaten/ });
+const changeText = async (p) => { const t = await p.textContent('main'); const m = /([+-]\d+ sinds vorige: \d+ \/ \d+|Zelfde score als vorige: \d+ \/ \d+)/.exec(t); return m ? m[1] : null; };
+
+async function part2Edge(browser, base) {
+  const NOW = new Date(2026, 9, 1, 12);
+  const DAY = 86400000;
+
+  // --- AC-10, AC-11, AC-12: full exams with steered mistakes (old-format previous, same score, 0 wrong, 1 topic wrong) ---
+  {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    await ctx.addInitScript(installOracle);
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+    p.on('dialog', (d) => d.accept());
+    await p.clock.setFixedTime(NOW);
+    await p.goto(base + '#/examen');
+    const names = await p.evaluate(() => Object.assign({}, window.RB.topics));
+    // The newest saved exam is in the old format: no change line, even though an older 40 / 50 exists.
+    await writeState(p, { version: 3, exams: [{ date: NOW.getTime() - 2 * DAY, score: 40, total: 50, passed: false }, { date: NOW.getTime() - DAY, kennis: 11, inzicht: 26, passed: true }] });
+    await p.reload();
+
+    let ans = await runMock(p, () => false);
+    let text = await p.textContent('main');
+    check('oracle: an all-correct run scores 50 / 50', /50 \/ 50 goed/.test(text), text.slice(0, 200));
+    check('AC-11: newest previous exam in the old format: no change line', (await changeText(p)) === null, await changeText(p));
+    check('AC-12: 0 wrong: no weak-topic button', (await p.getByRole('button', { name: /Oefen zwakke onderwerpen/ }).count()) === 0);
+    check('AC-12: 0 wrong: no weak-topic line', (await weakLine(p).count()) === 0);
+    check('AC-12: 0 wrong: no "Kijk eerst je fouten na" hint', !/Kijk eerst je fouten na/.test(text));
+    check('0 wrong: "Alles goed!" in Nakijken', /Alles goed!/.test(text));
+    check('0 wrong: "Nieuw proefexamen" is the primary button', await p.getByRole('button', { name: 'Nieuw proefexamen' }).evaluate((b) => !b.classList.contains('secundair')));
+    const rows0 = await tableRows(p);
+    check('AC-10: 0 wrong: every topic listed with fout 0, sorted by asked then Dutch name', JSON.stringify(rows0) === JSON.stringify(expectedRows(tally(ans), names)), JSON.stringify(rows0));
+    check('AC-10: table lists exactly the topics in this exam', rows0.length === Object.keys(tally(ans)).length);
+    check('result: focus on the result heading (50 / 50)', await p.evaluate(() => document.activeElement.tagName === 'H1' && /Uitslag/.test(document.activeElement.textContent)));
+
+    // Same score again.
+    ans = await runMock(p, () => false);
+    check('AC-11: same score: "Zelfde score als vorige: 50 / 50"', (await changeText(p)) === 'Zelfde score als vorige: 50 / 50', await changeText(p));
+
+    // One wrong answer in one topic: still a pass, weak line without "vooral".
+    let wrongTopic = null;
+    ans = await runMock(p, (info) => { if (!wrongTopic) { wrongTopic = info.topic; return true; } return false; });
+    text = await p.textContent('main');
+    check('AC-11: -1 after 50 / 50', (await changeText(p)) === '-1 sinds vorige: 50 / 50', await changeText(p));
+    check('AC-12: pass with 1 wrong still shows the weak line and button', /Geslaagd/.test(await p.textContent('h1')) && (await p.getByRole('button', { name: /^Oefen zwakke onderwerpen \(\d+\)$/ }).count()) === 2);
+    check('AC-12: 1 wrong topic: "Je fouten zaten bij <topic>." (no "vooral")', (await weakLine(p).textContent()) === 'Je fouten zaten bij ' + names[wrongTopic] + '.', await weakLine(p).textContent());
+    const rows1 = await tableRows(p);
+    check('AC-10: 1 wrong: that topic is the first row with fout 1', JSON.stringify(rows1) === JSON.stringify(expectedRows(tally(ans), names)) && rows1[0][0] === names[wrongTopic] && rows1[0][2] === '1', JSON.stringify(rows1));
+    check('AC-10: fout > 0 is bold, 0 is plain', await p.$$eval('table.onderwerpen tbody tr', (trs) => trs.every((tr) => (tr.cells[2].querySelector('strong') != null) === (tr.cells[2].textContent !== '0'))));
+
+    // Weak session from 1 topic: every question is from that topic, the mistake comes first.
+    const n1 = +(/\((\d+)\)/.exec(await p.getByRole('button', { name: /Oefen zwakke onderwerpen/ }).first().textContent())[1]);
+    const okIds = new Set(ans.filter((a) => a.ok).map((a) => a.id));
+    const wrongId = ans.find((a) => !a.ok).id;
+    await p.getByRole('button', { name: /Oefen zwakke onderwerpen/ }).first().click();
+    check('session start: focus on the session heading unless the first question has an input', await p.evaluate(() => document.querySelector('.invul input') ? document.activeElement.matches('.invul input') : document.activeElement.tagName === 'H1'));
+    const seen1 = [];
+    for (let k = 0; k < n1; k++) seen1.push(await p.evaluate(() => window.__q.answer(true)));
+    check('AC-12: 1 weak topic: first question is the mistake just made', seen1[0].id === wrongId, JSON.stringify(seen1.slice(0, 3)));
+    check('AC-12: 1 weak topic: only questions from that topic', seen1.every((a) => a.topic === wrongTopic), JSON.stringify(seen1.map((a) => a.topic)));
+    check('AC-12: 1 weak topic: nothing that was right in this exam', seen1.every((a) => !okIds.has(a.id)));
+    check('AC-12: 1 weak topic: no duplicates', new Set(seen1.map((a) => a.id)).size === seen1.length);
+    check('AC-12: weak session summary heading', /Zwakke onderwerpen: klaar/.test(await p.textContent('h1')));
+    check('AC-12/14: the mistake answered right in the weak session stays open (same day)', await readState(p).then((s) => s.mistakes[wrongId] && !s.mistakes[wrongId].resolved && s.mistakes[wrongId].streak === 1));
+    await p.getByRole('button', { name: 'Nog een ronde' }).click();
+    const again = await p.evaluate(() => window.__q.id());
+    check('AC-12: "Nog een ronde" rebuilds the list with the open mistake first', again === wrongId && (await p.textContent('.teller')).trim() === '1 / ' + n1, again + ' ' + (await p.textContent('.teller')));
+    check('AC-10..12 (full exams): no page errors', errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+
+  // --- AC-11, AC-12: comparison with the newest previous exam; 2, 3 and 4+ weak topics; the weak session order ---
+  {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    await ctx.addInitScript(installOracle);
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    p.on('dialog', (d) => d.accept());
+    await p.clock.setFixedTime(NOW);
+    await p.goto(base + '#/examen');
+    const names = await p.evaluate(() => Object.assign({}, window.RB.topics));
+    // Older open mistakes in every topic (from 5 days ago), so the session has old and new mistakes.
+    const older = await p.evaluate(() => {
+      const by = {};
+      Object.keys(window.RB.items).forEach((id) => { const t = window.RB.items[id].topic; if (!by[t]) by[t] = id; });
+      return by;
+    });
+    const mistakes = {};
+    Object.values(older).forEach((id, i) => { mistakes[id] = { count: 1, streak: 0, last: NOW.getTime() - 5 * DAY - i * 1000 }; });
+    await writeState(p, { version: 3, mistakes, exams: [
+      { date: NOW.getTime() - 3 * DAY, score: 30, total: 50, passed: false },
+      { date: NOW.getTime() - 2 * DAY, score: 45, total: 50, passed: true, timeUp: false }
+    ] });
+    await p.reload();
+
+    const steer = (k) => { const w = []; return (info) => { if (w.length < k && !w.includes(info.topic)) { w.push(info.topic); return true; } return false; }; };
+    let ans = await runMock(p, steer(2));
+    check('AC-11: compares with the newest previous exam (45), not the oldest (30)', (await changeText(p)) === '+3 sinds vorige: 45 / 50', await changeText(p));
+    let wrongNames = expectedRows(tally(ans), names).filter((r) => r[2] !== '0').map((r) => r[0]);
+    check('AC-12: 2 wrong topics: "Je fouten zaten bij A en B."', (await weakLine(p).textContent()) === 'Je fouten zaten bij ' + wrongNames[0] + ' en ' + wrongNames[1] + '.', await weakLine(p).textContent());
+
+    ans = await runMock(p, steer(3));
+    check('AC-11: -1 against the exam just before (48)', (await changeText(p)) === '-1 sinds vorige: 48 / 50', await changeText(p));
+    wrongNames = expectedRows(tally(ans), names).filter((r) => r[2] !== '0').map((r) => r[0]);
+    check('AC-12: 3 wrong topics: no "vooral"', (await weakLine(p).textContent()) === 'Je fouten zaten bij ' + wrongNames[0] + ', ' + wrongNames[1] + ' en ' + wrongNames[2] + '.', await weakLine(p).textContent());
+
+    // 5 topics wrong, with 3 / 2 / 1 / 1 / 1 mistakes, so the 3 weakest are clear.
+    const plan = [3, 2, 1, 1, 1];
+    const w = [];
+    const cnt = {};
+    ans = await runMock(p, (info) => {
+      let i = w.indexOf(info.topic);
+      if (i < 0 && w.length < plan.length) { w.push(info.topic); i = w.length - 1; }
+      if (i < 0) return false;
+      cnt[info.topic] = (cnt[info.topic] || 0) + 1;
+      return cnt[info.topic] <= plan[i];
+    });
+    const rows = await tableRows(p);
+    check('AC-10: steered 5-topic exam: rows match the tally in AC-10 order', JSON.stringify(rows) === JSON.stringify(expectedRows(tally(ans), names)), JSON.stringify(rows));
+    const weak = rows.filter((r) => r[2] !== '0').slice(0, 3).map((r) => r[0]);
+    check('AC-12: 4+ wrong topics: "vooral" and the 3 weakest', (await weakLine(p).textContent()) === 'Je fouten zaten vooral bij ' + weak[0] + ', ' + weak[1] + ' en ' + weak[2] + '.', await weakLine(p).textContent());
+    const st = await readState(p);
+    const topicOfName = {}; Object.keys(names).forEach((k) => { topicOfName[names[k]] = k; });
+    const weakTopics = weak.map((n) => topicOfName[n]);
+    const its = await p.evaluate(() => { const o = {}; Object.keys(window.RB.items).forEach((id) => { o[id] = window.RB.items[id].topic; }); return o; });
+    const openWeak = Object.keys(st.mistakes).filter((id) => !st.mistakes[id].resolved && its[id] && weakTopics.includes(its[id]));
+    const justMade = ans.filter((a) => !a.ok && weakTopics.includes(a.topic)).map((a) => a.id);
+    const okIds = new Set(ans.filter((a) => a.ok).map((a) => a.id));
+    const btnN = +(/\((\d+)\)/.exec(await p.getByRole('button', { name: /Oefen zwakke onderwerpen/ }).first().textContent())[1]);
+    check('AC-12: weak button count is 15 (enough questions in 3 topics)', btnN === 15, 'n ' + btnN);
+    await p.getByRole('button', { name: /Oefen zwakke onderwerpen/ }).last().click();
+    check('AC-12: bottom weak button starts the same session', (await p.textContent('.teller')).trim() === '1 / 15');
+    const sess = [];
+    for (let k = 0; k < 15; k++) sess.push(await p.evaluate(() => window.__q.answer(true)));
+    const ids = sess.map((a) => a.id);
+    const m = openWeak.length;
+    check('AC-12: weak session starts with all open mistakes of the 3 weakest topics', JSON.stringify(ids.slice(0, m).sort()) === JSON.stringify(openWeak.slice().sort()), JSON.stringify({ first: ids.slice(0, m), openWeak }));
+    const lastOf = (id) => Number(st.mistakes[id].last) || 0;
+    check('AC-12: open mistakes newest first, so those just made come before older ones', ids.slice(0, m).every((id, i) => !i || lastOf(ids[i - 1]) >= lastOf(id)) && justMade.every((id) => ids.indexOf(id) < m), JSON.stringify(ids.slice(0, m).map(lastOf)));
+    check('AC-12: only the 3 weakest topics (not the 4th or 5th)', sess.every((a) => weakTopics.includes(a.topic)), JSON.stringify(sess.map((a) => a.topic)));
+    check('AC-12: nothing answered right in this exam', ids.every((id) => !okIds.has(id) || openWeak.includes(id)));
+    check('AC-12: no duplicates in the weak session', new Set(ids).size === ids.length);
+    check('AC-10..12 (steered exams): no page errors', errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+
+  // --- AC-11, AC-35: previous exam with another total or broken; long topic names at 320px ---
+  {
+    const ctx = await browser.newContext({ viewport: { width: 320, height: 740 } });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    p.on('dialog', (d) => d.accept());
+    await p.clock.install({ time: NOW });
+    await p.goto(base + '#/examen');
+    await writeState(p, { version: 3, exams: [{ date: NOW.getTime() - DAY, score: 30, total: 40, passed: false }] });
+    await p.reload();
+    await p.getByRole('button', { name: 'Start proefexamen' }).click();
+    await p.clock.runFor(31 * 60000);
+    await p.getByRole('heading', { name: /Uitslag/ }).waitFor();
+    check('AC-11: previous exam with 40 questions: no change line', (await changeText(p)) === null, await changeText(p));
+
+    // Newest stored exam is broken (score 60 of 50) and has no topics; the valid one before it is used.
+    await writeState(p, { version: 3, exams: [
+      { date: NOW.getTime() - 2 * DAY, score: 41, total: 50, passed: false },
+      { date: NOW.getTime() - DAY, score: 60, total: 50, passed: true, topics: { borden: [9, 1] } }
+    ] });
+    await p.goto(base + '#/examen'); await p.reload();
+    // Very long topic names (no spaces) must wrap, not scroll sideways.
+    await p.evaluate(() => { Object.keys(window.RB.topics).forEach((k) => { window.RB.topics[k] = 'Verkeersregelaarsaanwijzingsbevoegdheidsvoorschriften ' + window.RB.topics[k]; }); });
+    await p.getByRole('button', { name: 'Start proefexamen' }).click();
+    await p.clock.runFor(31 * 60000);
+    await p.getByRole('heading', { name: /Uitslag/ }).waitFor();
+    check('AC-11/35: broken newest exam is dropped; compares with 41 / 50', (await changeText(p)) === '-41 sinds vorige: 41 / 50', await changeText(p));
+    check('AC-10: long topic names at 320px: the per-topic table does not overflow', await p.$eval('table.onderwerpen', (t) => t.scrollWidth <= t.clientWidth && t.getBoundingClientRect().right <= t.closest('.kaart').getBoundingClientRect().right));
+    check('AC-10: long topic names: numbers stay on one line', await p.$$eval('table.onderwerpen td.num', (tds) => tds.every((td) => { const r = document.createRange(); r.selectNodeContents(td); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size === 1; })));
+    check('AC-12: long topic names at 320px: the weak-topic line wraps (no horizontal scroll)', (await p.evaluate(() => document.documentElement.scrollWidth)) <= 320, 'page width ' + (await p.evaluate(() => document.documentElement.scrollWidth)) + ', .zwak-regel scrollWidth ' + (await p.$eval('.zwak-regel', (e) => e.scrollWidth)));
+    check('AC-10/12: time-up with 0 answered: every topic counts as wrong and weak line shows "vooral"', (await tableRows(p)).every((r) => /^0 van \d+$/.test(r[1]) && r[2] !== '0') && /^Je fouten zaten vooral bij /.test(await weakLine(p).textContent()));
+    await p.screenshot({ path: path.join(SHOTS, 'part2-long-names-320.png'), fullPage: true });
+    check('AC-11/35 (320px): no page errors', errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+
+  // --- AC-13, AC-14, AC-15, AC-16, AC-35: Foutenlogboek and Vandaag with mistakes answered right today ---
+  {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    await ctx.addInitScript(installOracle);
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+    await p.clock.setFixedTime(NOW);
+    await p.goto(base + '#/fouten');
+    const signs = await p.evaluate(() => window.RB.signs.slice(0, 3).map((s) => ({ id: 'bord-' + s.id, label: 'Bord: ' + s.name })));
+    const qs = await p.evaluate(() => window.RB.questions.filter((q) => q.topic === 'snelheid' && q.type === 'mc').slice(0, 2).map((q) => ({ id: q.id, label: q.q })));
+    const today = { streak: 1, okDay: '2026-10-01' };
+
+    // Two of five right today (plural line); per-topic Oefen includes them; a topic with only resolved mistakes is disabled.
+    const ms = {};
+    signs.forEach((s, i) => { ms[s.id] = Object.assign({ count: 1, streak: 0, last: NOW.getTime() - (i + 2) * DAY }, i < 2 ? today : {}); });
+    ms[qs[0].id] = { count: 2, streak: 2, resolved: true, last: NOW.getTime() - 9 * DAY };
+    ms[qs[1].id] = { count: 1, streak: 2, resolved: true, last: NOW.getTime() - 8 * DAY };
+    const parkeer = await p.evaluate(() => window.RB.questions.find((q) => q.topic === 'parkeren').id);
+    ms[parkeer] = { count: 1, streak: 0 }; // no last, no given, no topic
+    await writeState(p, { version: 3, mistakes: ms });
+    await p.reload();
+    let main = await p.textContent('main');
+    check('AC-13: plural line "2 daarvan … Die zijn pas weg …"', main.includes('2 daarvan had je vandaag al goed. Die zijn pas weg als je ze morgen weer goed hebt.'));
+    check('AC-13: button counts all 4 open (2 right today)', await p.getByRole('button', { name: 'Oefen mijn fouten (4)' }).isEnabled());
+    check('AC-13: exact label twice', (main.match(/Vandaag al goed\. Morgen nog 1× goed, dan is hij weg\./g) || []).length === 2);
+    check('AC-13: old "komen morgen terug" text is gone', !/Die komen morgen terug|vandaag goed, morgen nog een keer/.test(main));
+    const rowOf = (name) => p.locator('.balk-rij', { hasText: name });
+    check('AC-13: per-topic Oefen disabled for a topic with only resolved mistakes', await rowOf('Snelheid').getByRole('button', { name: 'Oefen' }).isDisabled());
+    const labels = await p.$$eval('.fouten-lijst li strong', (s) => s.map((x) => x.textContent));
+    check('AC-35: open list newest first; a mistake without "last" sorts as oldest', JSON.stringify(labels) === JSON.stringify([signs[0].label, signs[1].label, signs[2].label, await p.evaluate((id) => window.RB.items[id].q, parkeer)]), JSON.stringify(labels));
+    await rowOf('Verkeersborden').getByRole('button', { name: 'Oefen' }).click();
+    check('AC-13: per-topic Oefen includes the 2 right today (3 questions)', (await p.textContent('.teller')).trim() === '1 / 3', await p.textContent('.teller'));
+    check('session start (per-topic Oefen): focus on the session heading', await p.evaluate(() => document.activeElement.tagName === 'H1'));
+
+    // AC-14 in the UI: answer all 3 right; the 2 right-today ones stay open; "Nog een ronde" has all 3 again.
+    for (let k = 0; k < 3; k++) await p.evaluate(() => window.__q.answer(true));
+    let s = await readState(p);
+    check('AC-14: right again today: still open with streak 1 and okDay today', [signs[0], signs[1]].every((x) => !s.mistakes[x.id].resolved && s.mistakes[x.id].streak === 1 && s.mistakes[x.id].okDay === '2026-10-01'), JSON.stringify(s.mistakes));
+    check('AC-14: the third, right for the first time today, is now open with streak 1', !s.mistakes[signs[2].id].resolved && s.mistakes[signs[2].id].streak === 1);
+    check('Fouten oefenen: new note text', (await p.textContent('main')).includes('Vandaag vaker oefenen mag, maar telt niet extra.'));
+    await p.getByRole('button', { name: 'Nog een ronde' }).click();
+    check('AC-13: "Nog een ronde" keeps the mistakes right today (3 again)', (await p.textContent('.teller')).trim() === '1 / 3', await p.textContent('.teller'));
+
+    // AC-16: all 3 borden mistakes are right today → Vandaag leaves them out; the parkeren one stays.
+    await p.goto(base + '#/start');
+    check('AC-16: Vandaag leaves out every mistake right today', /(^|\D)1 fout herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+
+    // AC-15 in the UI: answer one of them wrong today → back in Vandaag.
+    await p.goto(base + '#/fouten');
+    await rowOf('Verkeersborden').getByRole('button', { name: 'Oefen' }).click();
+    const w = await p.evaluate(() => window.__q.answer(false));
+    s = await readState(p);
+    check('AC-15: wrong after right today: streak 0, okDay null', s.mistakes[w.id].streak === 0 && s.mistakes[w.id].okDay == null && !s.mistakes[w.id].resolved, JSON.stringify(s.mistakes[w.id]));
+    await p.goto(base + '#/start');
+    check('AC-15/16: the mistake answered wrong again is back in Vandaag', /2 fouten herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+
+    // AC-14 next day: right once more resolves it.
+    await p.clock.setFixedTime(new Date(2026, 9, 2, 9));
+    await p.goto(base + '#/fouten'); await p.reload();
+    check('AC-13: next day: no "vandaag al goed" labels', !/Vandaag al goed/.test(await p.textContent('main')));
+
+    // All open mistakes right today ("allemaal") and 0 open (disabled).
+    const all3 = {};
+    signs.forEach((x, i) => { all3[x.id] = Object.assign({ count: 1, last: NOW.getTime() - i * 1000 }, today); });
+    await p.clock.setFixedTime(NOW);
+    await writeState(p, { version: 3, mistakes: all3 });
+    await p.reload();
+    check('AC-13: all open right today: "allemaal" line', (await p.textContent('main')).includes('Die had je vandaag allemaal al goed. Ze zijn pas weg als je ze morgen weer goed hebt.'));
+    check('AC-13: all open right today: button enabled with all 3', await p.getByRole('button', { name: 'Oefen mijn fouten (3)' }).isEnabled());
+    await p.goto(base + '#/start');
+    check('AC-16: all mistakes right today: Vandaag has no mistakes to repeat', !/fouten? herhalen/.test(await p.textContent('.vandaag')), await p.textContent('.vandaag'));
+    const done = {};
+    signs.forEach((x) => { done[x.id] = { count: 1, streak: 2, resolved: true, last: NOW.getTime() }; });
+    await writeState(p, { version: 3, mistakes: done });
+    await p.goto(base + '#/fouten'); await p.reload();
+    check('AC-13: 0 open: "Oefen mijn fouten (0)" disabled, no summary line', (await p.getByRole('button', { name: 'Oefen mijn fouten (0)' }).isDisabled()) && !/vandaag al goed/i.test(await p.textContent('main')));
+
+    // AC-35: mistakes with missing or hostile fields.
+    await writeState(p, { version: 3, mistakes: {
+      [signs[0].id]: { count: 1 },
+      [signs[1].id]: { count: 1, streak: 1, okDay: '2026-10-01', given: '<img src=x onerror="window.__y=1">', last: 'x' },
+      'bestaat-niet': { count: 3, streak: 1, okDay: '2026-10-01' },
+      constructor: { count: 1 }
+    } });
+    await p.reload();
+    main = await p.textContent('main');
+    check('AC-35: mistakes missing fields: Foutenlogboek renders, unknown ids ignored', /Oefen mijn fouten \(2\)/.test(main) && /1 daarvan had je vandaag al goed/.test(main), main.slice(0, 300));
+    check('AC-35: stored "given" is shown as text, not HTML', !(await p.evaluate(() => window.__y)) && main.includes('laatste antwoord: <img'));
+    await p.getByRole('button', { name: 'Oefen mijn fouten (2)' }).click();
+    check('AC-35: practice with broken mistakes starts', (await p.textContent('.teller')).trim() === '1 / 2');
+    check('AC-13..16/35: no page errors', errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
 }
