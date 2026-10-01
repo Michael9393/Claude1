@@ -66,11 +66,22 @@
     };
   }
 
-  RB.renderIntersection = function (scenario, picks) {
+  var FROM = { S: 'komt van onder', N: 'komt van boven', E: 'komt van rechts', W: 'komt van links' };
+  var MOVE = { rechtdoor: 'gaat rechtdoor', links: 'slaat linksaf', rechts: 'slaat rechtsaf' };
+  var TYPE = { auto: 'auto', fiets: 'fietser', tram: 'tram' };
+  function describe(v) { return v.id + ': ' + TYPE[v.type] + ', ' + FROM[v.arm] + ', ' + MOVE[v.move]; }
+
+  // picks: gekozen volgorde (cijfers bij de voertuigen). opts.still: alleen een plaatje, niet aanklikbaar.
+  RB.renderIntersection = function (scenario, picks, opts) {
     picks = picks || [];
+    opts = opts || {};
     var yieldArms = scenario.yieldArms || [];
     var unpaved = scenario.unpaved || [];
-    var out = '<svg class="kruispunt" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">';
+    var label = 'Kruispunt. ' + scenario.vehicles.map(describe).join('. ') + '.' +
+      (yieldArms.length ? ' Haaientanden voor verkeer dat ' + yieldArms.map(function (a) { return FROM[a]; }).join(' en ') + '.' : '') +
+      (unpaved.length ? ' Onverharde weg voor verkeer dat ' + unpaved.map(function (a) { return FROM[a]; }).join(' en ') + '.' : '') +
+      (opts.still && picks.length ? ' Volgorde: ' + picks.join(', ') + '.' : '');
+    var out = '<svg class="kruispunt" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" role="' + (opts.still ? 'img' : 'group') + '" aria-label="' + label + '">';
     out += '<rect width="300" height="300" fill="var(--grass)"/>';
     ['S', 'N', 'E', 'W'].forEach(function (a) { out += arm(a, unpaved.indexOf(a) >= 0); });
     out += '<rect x="110" y="110" width="80" height="80" fill="var(--road)"/>';
@@ -80,11 +91,12 @@
     });
     scenario.vehicles.forEach(function (v) {
       var p = position(v.arm);
-      out += '<g class="voertuig" data-id="' + v.id + '" role="button" tabindex="0" aria-label="Voertuig ' + v.id + '">';
+      var n = picks.indexOf(v.id);
+      out += opts.still ? '<g>' : '<g class="voertuig" data-id="' + v.id + '" role="button" tabindex="0" aria-label="' +
+        describe(v) + (n >= 0 ? ', gekozen als ' + (n + 1) : '') + '">';
       out += '<g transform="rotate(' + ANGLE[v.arm] + ' 150 150) translate(170 238)">' + vehicleShape(v.type) + arrow(v.move) + '</g>';
       out += '<circle cx="' + p.x + '" cy="' + p.y + '" r="22" fill="transparent" class="raakvlak"/>';
       out += '<text x="' + p.x + '" y="' + p.y + '" class="letter" text-anchor="middle" dominant-baseline="central">' + v.id + '</text>';
-      var n = picks.indexOf(v.id);
       if (n >= 0) {
         out += '<circle cx="' + (p.x + 16) + '" cy="' + (p.y - 16) + '" r="10" fill="var(--accent)"/>' +
           '<text x="' + (p.x + 16) + '" y="' + (p.y - 16) + '" class="badge" text-anchor="middle" dominant-baseline="central">' + (n + 1) + '</text>';

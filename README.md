@@ -2,26 +2,29 @@
 
 ## Theorie B: oefenapp voor het CBR theorie-examen (auto)
 
-A study app for the Dutch car (B) theory exam, in Dutch. Plain HTML/CSS/JS: no build step, no server, works offline. Progress is saved in the browser (`localStorage`).
+A study app for the Dutch car (B) theory exam, in Dutch. Plain HTML/CSS/JS: no build step, no account. Progress is saved in the browser (`localStorage`). When served over http(s) it can be installed on a phone and works offline (service worker in `sw.js`).
 
 ### Open it
 
 - Open `index.html` in a browser, or
 - serve the folder (`npx http-server .`), or
-- enable GitHub Pages for the repo to use it on your phone.
+- enable GitHub Pages for the repo to use it on your phone (then "Add to home screen").
+
+After changing any file, bump `CACHE` in `sw.js` so installed copies pick up the new version.
 
 ### Wat zit erin
 
 | Onderdeel | Wat je doet |
 |---|---|
-| **Flashcards** | Borden, getallen en vragen met herhaling op afstand (Leitner: na 1, 2, 4, 8, 16 dagen). |
+| **Vandaag** | Eén knop op de startpagina: open fouten, kaarten die aan de beurt zijn en een paar nieuwe vragen uit je zwakste onderwerp. |
+| **Flashcards** | Borden, getallen en vragen met herhaling op afstand (Leitner: na 1, 2, 4, 8, 16 kalenderdagen). |
 | **Borden** | Bord → betekenis en betekenis → bord, plus een overzicht van alle borden. |
 | **Voorrang** | Kruispunten van bovenaf: tik de verkeersdeelnemers in de juiste volgorde aan. |
 | **Getallen** | Invulvragen over snelheden, promilles, afstanden, massa's, met spiekbriefje. |
-| **Proefexamen** | 12 kennis + 28 inzicht, slagingsgrens 10 en 25, nakijken aan het eind. |
-| **Foutenlogboek** | Elke fout uit elke oefening, per onderwerp, met "oefen mijn fouten". Een fout is opgelost na twee keer achter elkaar goed. |
+| **Proefexamen** | Zoals het CBR-examen sinds 7 april 2025: 50 vragen door elkaar, 30 minuten, 44 goed om te slagen. Nakijken aan het eind. |
+| **Foutenlogboek** | Elke fout uit elke oefening en elk proefexamen, per onderwerp. Een fout is opgelost als je de vraag goed hebt op twee verschillende dagen. |
 
-Gevaarherkenning (hazard perception) zit er nog niet in.
+Gevaarherkenning (de filmpjes in het echte examen) en vragen met foto's zitten er nog niet in. Zie [docs/product-review](docs/product-review/README.md) voor de review en de plannen.
 
 ### Content
 
@@ -37,5 +40,7 @@ After editing, repeat the check:
 
 ```sh
 node tests/validate.js           # automatic checks (sources, duplicates, count, answers)
+node tests/logic.js              # behaviour tests: number input, flashcard schedule, mistake log, saved data
+NODE_PATH=$(npm root -g) node tests/smoke.js   # browser smoke test (needs Playwright)
 node tests/review.js > review.txt   # readable list for a manual review round
 ```

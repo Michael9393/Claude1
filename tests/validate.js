@@ -56,12 +56,13 @@ for (const v of RB.voorrang) {
   for (const a of [...(v.yieldArms || []), ...(v.unpaved || [])]) if (!ARMS.includes(a)) fail('Onbekende arm: ' + v.id);
 }
 
-// Genoeg vragen voor een proefexamen (12 kennis, 28 inzicht waarvan 10 voorrang).
+// Genoeg vragen voor een proefexamen van 50 (6 voorrang, 22 inzicht, 22 kennis; zie EXAM in js/app.js).
+// Minstens twee keer zoveel als nodig, anders ken je de proefexamens snel uit je hoofd.
 const kennis = RB.questions.filter((q) => q.part === 'kennis').length + RB.signs.length;
 const inzichtMc = RB.questions.filter((q) => q.part === 'inzicht').length;
-if (kennis < 12) fail('Te weinig kennisvragen: ' + kennis);
-if (RB.voorrang.length < 10) fail('Te weinig voorrangssituaties: ' + RB.voorrang.length);
-if (inzichtMc < 18) fail('Te weinig inzichtvragen: ' + inzichtMc);
+if (kennis < 44) fail('Te weinig kennisvragen: ' + kennis);
+if (RB.voorrang.length < 12) fail('Te weinig voorrangssituaties: ' + RB.voorrang.length);
+if (inzichtMc < 44) fail('Te weinig inzichtvragen: ' + inzichtMc);
 if (RB.questions.length < 200) fail('Minder dan 200 vragen: ' + RB.questions.length);
 
 if (errors.length) {
