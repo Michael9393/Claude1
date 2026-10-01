@@ -203,6 +203,11 @@
     var ms = state.mistakes || {};
     return Object.keys(ms).filter(function (id) { return hasKey(known, id) && !ms[id].resolved; });
   }
+  // Fout vandaag al goed (streak 1 met okDay vandaag): pas morgen op te lossen, dus vandaag niet opnieuw aanbieden.
+  function okTodayIn(state, id, today) {
+    var m = state.mistakes[id];
+    return !!(m && !m.resolved && m.streak && m.okDay === today);
+  }
   function index(bank) {
     var out = {};
     bank.forEach(function (x) { out[x.id] = x; });
@@ -277,10 +282,8 @@
     var mark = function (id) { inPlan[id] = true; };
     var id = function (x) { return x.id; };
     // Fouten die je vandaag al goed had, horen niet in het plan (AC-16).
-    var mistakes = orderMistakes(state.mistakes, open.filter(function (k) {
-      var m = state.mistakes[k];
-      return !(m.streak && m.okDay === today);
-    }), today).slice(0, rules.mistakes);
+    var mistakes = orderMistakes(state.mistakes, open.filter(function (k) { return !okTodayIn(state, k, today); }), today)
+      .slice(0, rules.mistakes);
     mistakes.forEach(mark);
     var due = bank.filter(function (x) {
       var c = hasKey(state.srs, x.id) ? state.srs[x.id] : null;
@@ -364,13 +367,32 @@
   }
 
   // "Oefen <onderwerp>": open fouten van dat onderwerp (AC-21-volgorde), dan nooit gezien, dan oudste "seen". Id's.
+  // Fouten die je vandaag al goed had, blijven er helemaal uit (zoals in het plan, AC-16).
   function topicPractice(state, bank, topic, now, max) {
+    var today = dayKey(now);
     var list = bank.filter(function (x) { return x.topic === topic; });
-    var mistakes = orderMistakes(state.mistakes, openIds(state, index(list)), dayKey(now));
+    var open = openIds(state, index(list));
+    var mistakes = orderMistakes(state.mistakes, open.filter(function (id) { return !okTodayIn(state, id, today); }), today);
     var picked = {};
-    mistakes.forEach(function (id) { picked[id] = true; });
+    open.forEach(function (id) { picked[id] = true; });
     var rest = freshFirst(state, list.filter(function (x) { return !picked[x.id]; })).map(function (x) { return x.id; });
     return mistakes.concat(rest).slice(0, max || 15);
+  }
+
+  // "Oefen oude fouten": de oude fouten die vandaag nog niet goed waren, oudste eerst, hoogstens max (20).
+  // "Nog een ronde" geeft dan de volgende: wat goed was, is nu "vandaag al goed"; wat fout was, is niet meer oud.
+  function oldPractice(state, bank, now, max) {
+    return readiness(state, bank, now).eis3.todo.slice(0, max || 20);
+  }
+
+  // "Nog een ronde" als het doel van vandaag gehaald is: de volgende uit het plan (hoogstens max, 15).
+  // Is het plan leeg: de langst niet geziene items, maar zonder nieuwe als het plan geen nieuwe toestaat
+  // (onderhoud, examen morgen of vandaag: AC-25, AC-26). Kan leeg zijn.
+  function extraRound(state, bank, plan, max) {
+    var n = max || 15;
+    if (plan.order.length) return plan.order.slice(0, n);
+    var pool = plan.rules.perDay === 0 ? bank.filter(function (x) { return wasSeen(state, x.id); }) : bank;
+    return freshFirst(state, pool).slice(0, n).map(function (x) { return x.id; });
   }
 
   var GOAL = 46;   // eis 1: zoveel goed in elk van de laatste 3 proefexamens
@@ -380,6 +402,7 @@
   // Alleen onderwerpen met items in de bank tellen; alleen proefexamens van 50 vragen tellen voor eis 1.
   function readiness(state, bank, now, name) {
     var nm = name || String;
+    var today = dayKey(now);
     var known = index(bank);
     var topics = [];
     bank.forEach(function (x) { if (topics.indexOf(x.topic) < 0) topics.push(x.topic); });
@@ -421,8 +444,10 @@
     var last = function (id) { return lastOf(state.mistakes, id); };
     var old = open.filter(function (id) { return last(id) === -Infinity || dayKey(last(id)) < cutoff; })
       .sort(function (a, b) { return (last(a) - last(b)) || cmp(a, b); });
+    // todo: de oude fouten die je vandaag nog kunt oefenen (niet al vandaag goed); okToday: hoeveel wel.
+    var todo = old.filter(function (id) { return !okTodayIn(state, id, today); });
     var e3 = {
-      met: !old.length, cutoff: cutoff, ids: old, open: open.length,
+      met: !old.length, cutoff: cutoff, ids: old, todo: todo, okToday: old.length - todo.length, open: open.length,
       text: !open.length ? 'Geen open fouten'
         : old.length ? old.length + ' ' + (old.length === 1 ? 'fout' : 'fouten') + ' van vóór ' + dayLabel(cutoff)
         : 'Geen fouten van vóór ' + dayLabel(cutoff)
@@ -453,6 +478,7 @@
     joinNames: joinNames, okTodayLine: okTodayLine,
     dayDiff: dayDiff, wasSeen: wasSeen, freshFirst: freshFirst, orderMistakes: orderMistakes, planRules: planRules,
     mockDue: mockDue, lastActivity: lastActivity, dayPlan: dayPlan, minutes: minutes, todayStatus: todayStatus,
-    planDetail: planDetail, planNotes: planNotes, replanToday: replanToday, topicPractice: topicPractice, readiness: readiness
+    planDetail: planDetail, planNotes: planNotes, replanToday: replanToday, oldPractice: oldPractice, extraRound: extraRound,
+    topicPractice: topicPractice, readiness: readiness
   };
 })();

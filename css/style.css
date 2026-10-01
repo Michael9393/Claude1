@@ -120,6 +120,7 @@ h3 { margin: 12px 0 6px; font-size: 1.05rem; }
 .eis details { margin-top: 6px; }
 .eis details summary { padding: 11px 0; }
 .klaar .noot { margin: 6px 0 0; }
+.naar-vandaag { min-height: 44px; }
 
 /* Tegels op de startpagina */
 .tegels { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }

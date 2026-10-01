@@ -303,17 +303,19 @@
     store.setToday(t.target, t.mock);
   }
   // Vragen voor een ronde "Vandaag": wat er nog over is van het doel, in planvolgorde.
-  // Doel al gehaald ("Nog een ronde"): de volgende 15 uit het plan, of anders de langst niet geziene.
-  function todayList() {
-    var plan = planNow();
+  // Doel al gehaald of plan op ("Nog een ronde"): U.extraRound (geen nieuwe als het plan die niet toestaat).
+  function todayList(plan) {
+    plan = plan || planNow();
     var td = ensureToday(plan);
     var left = Math.max(0, Number(td.target) - Number(td.practised));
-    var ids = plan.order.slice(0, left || 15);
-    if (!ids.length) ids = U.freshFirst(store.state(), shuffle(all())).slice(0, 15).map(function (x) { return x.id; });
+    var ids = left ? plan.order.slice(0, left) : [];
+    if (!ids.length) ids = U.extraRound(store.state(), shuffle(all()), plan, 15);
     return shuffle(ids.map(function (id) { return items[id]; }));
   }
   function runToday() {
-    runSession('Vandaag', todayList(), runToday, {
+    var list = todayList();
+    if (!list.length) { go('#/start'); return; }
+    runSession('Vandaag', list, runToday, {
       againLabel: 'Nog een ronde',
       note: 'Een fout is opgelost als je hem op twee verschillende dagen goed hebt. Wat je vandaag goed had, komt morgen terug.',
       // Alles uit "Vandaag" (behalve voorrang) gaat ook in de herhaling van de flashcards.
@@ -389,15 +391,16 @@
       html += U.planNotes(plan.rules).map(function (t) { return '<p class="klein">' + esc(t) + '</p>'; }).join('');
     }
     var mockLabel = nulmeting ? 'Proefexamen (nulmeting)' : 'Proefexamen';
+    // "Nog een ronde" alleen als er iets te oefenen is (in onderhoud of vlak voor het examen kan dat op zijn).
+    var again = s.state === 'examen' || s.state === 'gehaald' ? U.extraRound(st, all(), plan, 1).length > 0 : false;
+    var againBtn = again ? '<button class="knop secundair" data-act="vandaag">Nog een ronde</button>' : '';
     if (s.state === 'bezig') {
       html += '<div class="rij"><button class="knop groot" data-act="vandaag">' + (done ? 'Ga verder (' : 'Start (') + next.length + ' ' + (next.length === 1 ? 'vraag' : 'vragen') + ')</button>' +
         (s.mockLeft ? '<a class="knop secundair" href="#/examen">' + mockLabel + '</a>' : '') + '</div>';
     } else if (s.state === 'examen') {
-      html += '<div class="rij"><a class="knop groot" href="#/examen">' + (nulmeting ? mockLabel : 'Doe het proefexamen') + '</a>' +
-        '<button class="knop secundair" data-act="vandaag">Nog een ronde</button></div>';
+      html += '<div class="rij"><a class="knop groot" href="#/examen">' + (nulmeting ? mockLabel : 'Doe het proefexamen') + '</a>' + againBtn + '</div>';
     } else if (s.state === 'gehaald') {
-      html += '<p class="klein">Morgen staat er weer een nieuw plan klaar.</p>' +
-        '<div class="rij"><button class="knop secundair" data-act="vandaag">Nog een ronde</button></div>';
+      html += '<p class="klein">Morgen staat er weer een nieuw plan klaar.</p>' + (again ? '<div class="rij">' + againBtn + '</div>' : '');
     }
     if (nulmeting) html += '<p class="klein">Een eerste proefexamen laat zien waar je nu staat.</p>';
     box.innerHTML = html;
@@ -420,7 +423,7 @@
     box.innerHTML = '<h2 id="klaar-kop">Klaar voor het examen?</h2>' +
       '<p class="klaar-status">' + esc(r.headline) + '</p>' +
       (r.noData ? '<p>Maak eerst vragen bij Vandaag. Dan zie je hier hoe ver je bent.</p>' +
-        '<p><button type="button" class="link-knop in-tekst" data-act="naar-vandaag">Naar Vandaag</button></p>' : '') +
+        '<p><button type="button" class="link-knop in-tekst naar-vandaag" data-act="naar-vandaag">Naar Vandaag</button></p>' : '') +
       '<ol class="eisen">' +
       '<li class="eis"><h3>Proefexamens ' + status(e1.met) + '</h3>' +
         '<p class="klein">Minstens 3 proefexamens, de laatste 3 allemaal 46 of meer goed</p>' +
@@ -436,7 +439,8 @@
       '<li class="eis"><h3>Oude fouten ' + status(e3.met) + '</h3>' +
         '<p class="klein">Geen open fouten ouder dan 2 dagen</p>' +
         '<p>' + esc(e3.text) + '</p>' +
-        (act && !e3.met ? '<div class="rij"><button type="button" class="knop secundair" data-act="oude-fouten">Oefen oude fouten (' + e3.ids.length + ')</button></div>' : '') + '</li>' +
+        (act && e3.todo.length ? '<div class="rij"><button type="button" class="knop secundair" data-act="oude-fouten">Oefen oude fouten (' + Math.min(OLD_MAX, e3.todo.length) + ')</button></div>' : '') +
+        (act && !e3.met && !e3.todo.length ? '<p class="klein">' + esc(U.okTodayLine(e3.okToday, e3.okToday)) + '</p>' : '') + '</li>' +
       '</ol>' +
       '<p class="noot">Gevaarherkenning en vragen met foto\'s meet deze app niet. Oefen die met je theorieboek en de filmpjes die erbij horen.</p>' +
       '<p class="noot">Je kent veel van deze vragen al; het echte examen heeft andere vragen.</p>' +
@@ -454,13 +458,14 @@
         var topic = t.getAttribute('data-topic');
         practise(topicName(topic), function () { return U.topicPractice(store.state(), shuffle(all()), topic, Date.now(), 15); });
       } else if (a === 'oude-fouten') {
-        // Alle open fouten van vóór eergisteren, oudste eerst.
-        practise('Oude fouten', function () { return U.readiness(store.state(), all(), Date.now(), topicName).eis3.ids; }, {
+        // Open fouten van vóór eergisteren die vandaag nog niet goed waren, oudste eerst, max. 20 per ronde.
+        practise('Oude fouten', function () { return U.oldPractice(store.state(), all(), Date.now(), OLD_MAX); }, {
           note: 'Wat je vandaag goed had, komt morgen nog één keer terug. Is het dan weer goed, dan is de fout opgelost. Vandaag vaker oefenen mag, maar telt niet extra.'
         });
       }
     };
   }
+  var OLD_MAX = 20; // "Oefen oude fouten": zoveel per ronde
   // Sessie uit de examencheck; elke ronde een nieuwe lijst. Niets meer te oefenen: terug naar de start.
   function practise(title, makeIds, opts) {
     (function start() {
@@ -790,6 +795,7 @@
   };
 
   function runExam() {
+    ensureToday(); // doel van vandaag eerst vastzetten (met proefexamen: gehalveerd), vóór de examenantwoorden (AC-24/28)
     // Binnen de vaste verdeling eerst nooit geziene items, dan de langst niet geziene (AC-33).
     var pick = function (filter, n) { return U.freshFirst(store.state(), shuffle(all(filter))).slice(0, n); };
     var voorrang = pick(function (x) { return x.kind === 'voorrang'; }, EXAM.voorrang);
@@ -1000,9 +1006,18 @@
       if (on) { a.setAttribute('aria-current', 'page'); a.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } else a.removeAttribute('aria-current');
     });
     document.title = (name === 'start' ? '' : TITLES[name] + ' · ') + 'Theorie Oefenen B';
+    renderedDay = U.dayKey();
     views[name]();
     window.scrollTo(0, 0);
   }
+  // Startpagina nog open na middernacht: bij terugkomen opnieuw tekenen, met het plan van de nieuwe dag.
+  var renderedDay = null;
+  function newDay() {
+    if (document.visibilityState === 'hidden' || renderedDay === U.dayKey() || !main.querySelector('.vandaag')) return;
+    route();
+  }
+  document.addEventListener('visibilitychange', newDay);
+  window.addEventListener('focus', newDay);
   // Naar een pagina gaan, ook als je daar al bent (dan komt er geen hashchange).
   function go(hash) {
     leaveGuard = null;

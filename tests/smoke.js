@@ -1130,6 +1130,34 @@ async function part3(browser, base) {
     check('part 3 mock-first: no page errors', e2.length === 0, e2.join(' | '));
     await c2.close();
   }
+
+  // --- Review fix: "Oefen oude fouten" leaves out mistakes already right today ---
+  {
+    const c3 = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    const r = await c3.newPage();
+    const e3 = [];
+    r.on('pageerror', (e) => e3.push(e.message));
+    const T0 = new Date(2026, 9, 1, 12); // 1 October 2026
+    await r.clock.setFixedTime(T0);
+    await r.goto(base + '#/start');
+    const ids = await r.evaluate(() => window.RB.signs.slice(0, 2).map((s) => 'bord-' + s.id));
+    const old = T0.getTime() - 10 * 86400000;
+    await writeState(r, { version: 3, history: { borden: [{ id: ids[0], ok: true, day: '2026-09-20' }] }, mistakes: {
+      [ids[0]]: { count: 1, streak: 1, okDay: '2026-10-01', last: old }, [ids[1]]: { count: 1, streak: 0, last: old } } });
+    await r.reload();
+    const card = r.getByRole('region', { name: 'Klaar voor het examen?' });
+    check('review: "Oefen oude fouten (1)" leaves out the one right today', await card.getByRole('button', { name: 'Oefen oude fouten (1)' }).isVisible());
+    await card.getByRole('button', { name: 'Oefen oude fouten (1)' }).click();
+    check('review: old-mistakes session has 1 question', (await r.textContent('.teller')).trim() === '1 / 1', await r.textContent('.teller'));
+    await writeState(r, { version: 3, history: { borden: [{ id: ids[0], ok: true, day: '2026-09-20' }] }, mistakes: {
+      [ids[0]]: { count: 1, streak: 1, okDay: '2026-10-01', last: old } } });
+    await r.goto(base + '#/start'); await r.reload();
+    check('review: all old mistakes right today: text instead of the button',
+      (await card.getByRole('button', { name: /Oefen oude fouten/ }).count()) === 0 &&
+      (await card.textContent()).includes('Die had je vandaag al goed. Hij is pas weg als je hem morgen weer goed hebt.'));
+    check('review: "Oefen oude fouten": no page errors', e3.length === 0, e3.join(' | '));
+    await c3.close();
+  }
 }
 
 server.listen(0, '127.0.0.1', async () => {

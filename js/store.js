@@ -6,6 +6,8 @@
   var VERSION = 3;
   // Antwoordgeschiedenis: zoveel antwoorden per onderwerp bewaren we.
   var HISTORY = 20;
+  // Bovengrens voor doel en "gedaan" per dag: meer is onzin uit de opslag.
+  var MAX_DAY = 1000;
   // Wachttijd per Leitner-bak (in dagen). Bak 0 = opnieuw leren.
   var INTERVALS = [0, 1, 2, 4, 8, 16];
 
@@ -71,7 +73,8 @@
     }
     // Doel van vandaag (deel 3); klopt er iets niet, dan null: de app rekent het opnieuw uit.
     var td = raw.today;
-    if (isObj(td) && U.isDay(td.day) && isInt(td.target) && td.target >= 0 && isInt(td.practised) && td.practised >= 0 &&
+    if (isObj(td) && U.isDay(td.day) && isInt(td.target) && td.target >= 0 && td.target <= MAX_DAY &&
+        isInt(td.practised) && td.practised >= 0 && td.practised <= MAX_DAY &&
         typeof td.mock === 'boolean') {
       s.today = { day: td.day, target: td.target, mock: td.mock, practised: td.practised };
     }
@@ -80,6 +83,8 @@
     if (isObj(pd) && U.isDay(pd.day) && isObj(pd.ids)) {
       s.practisedDay = { day: pd.day, ids: eachValid(pd.ids, function (v) { return v === true; }) };
     }
+    // "Gedaan" is minstens het aantal vragen dat vandaag als gedaan staat.
+    if (s.today) s.today.practised = Math.min(MAX_DAY, Math.max(s.today.practised, practisedCount(s, s.today.day)));
     return s;
   }
 
@@ -127,6 +132,10 @@
     list.push({ id: id, ok: !!ok, day: day });
     if (list.length > HISTORY) list.splice(0, list.length - HISTORY);
   }
+  // Aantal vragen dat op dag day als "gedaan" telde.
+  function practisedCount(st, day) {
+    return st.practisedDay && st.practisedDay.day === day ? Object.keys(st.practisedDay.ids).length : 0;
+  }
   // "Gedaan" (AC-27): het eerste antwoord per vraag per dag búiten een proefexamen. Los van answeredDay (AC-2),
   // anders telt een vraag die je vandaag eerst in het proefexamen had, bij Vandaag nooit meer mee.
   function addPractised(item) {
@@ -137,7 +146,7 @@
     var ids = state.practisedDay.ids;
     if (Object.prototype.hasOwnProperty.call(ids, id)) return;
     ids[id] = true;
-    if (state.today && state.today.day === day) state.today.practised++;
+    if (state.today && state.today.day === day) state.today.practised = Math.min(MAX_DAY, state.today.practised + 1);
   }
   function markSeen(id) {
     if (typeof id === 'string' && safeKey(id)) state.seen[id] = U.dayKey();
@@ -240,13 +249,15 @@
       var t = state.today;
       return t && t.day === U.dayKey() ? t : null;
     },
-    // Zet het doel van vandaag vast (of opnieuw, na een nieuwe examendatum). Wat vandaag al gedaan is, blijft tellen.
+    // Zet het doel van vandaag vast (of opnieuw, na een nieuwe examendatum). Wat vandaag al gedaan is, blijft tellen,
+    // ook antwoorden van vóór het vastzetten (die staan in practisedDay).
     setToday: function (target, mock) {
       var day = U.dayKey();
       var n = Math.floor(Number(target));
+      var before = state.today && state.today.day === day ? state.today.practised : 0;
       state.today = {
-        day: day, target: isFinite(n) && n > 0 ? n : 0, mock: !!mock,
-        practised: state.today && state.today.day === day ? state.today.practised : 0
+        day: day, target: isFinite(n) && n > 0 ? Math.min(MAX_DAY, n) : 0, mock: !!mock,
+        practised: Math.min(MAX_DAY, Math.max(before, practisedCount(state, day)))
       };
       save();
       return state.today;
