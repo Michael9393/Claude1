@@ -977,6 +977,837 @@ test('clean: geldige streak 1 van gisteren lost op met één goed antwoord vanda
   assert.deepStrictEqual(RB.store.openMistakes(), []);
 });
 
+// ---------- Exam-ready loop, deel 3: plan, doel van vandaag, klaar voor het examen (test-engineer) ----------
+// Alle tijden als lokale tijd, zodat de tests ook in TZ=Europe/Amsterdam kloppen. m = 1..12.
+const T = (y, m, d, h = 12, mi = 0) => new Date(y, m - 1, d, h, mi).getTime();
+const SEP30 = T(2026, 9, 30);
+// Testbank: mk('snelheid', 3) -> [{ id: 'snelheid-0', topic: 'snelheid', kind: 'mc' }, …].
+const mk = (topic, n, kind = 'mc', from = 0) => Array.from({ length: n }, (_, i) => ({ id: topic + '-' + (from + i), topic, kind }));
+const idsOf = (list) => list.map((x) => x.id);
+const byId = (ids, f) => Object.fromEntries(ids.map((id, i) => [id, f(id, i)]));
+const mis = (ids, last, extra) => byId(ids, () => Object.assign({ count: 1, streak: 0, last }, extra));
+const cards = (ids, due) => byId(ids, () => ({ box: 1, due }));
+const seenOn = (ids, day) => byId(ids, () => day);
+const hist = (topic, n, ok, day = '2026-09-29') => Array.from({ length: n }, (_, i) => ({ id: topic + '-h' + i, ok: i < ok, day }));
+const exam = (score, date = T(2026, 9, 29), total = 50, extra) => Object.assign({ date, score, total, passed: score >= 44, timeUp: false }, extra);
+// De toestand zoals de app hem ziet (door clean()), met util en store uit dezelfde vm.
+function setup(raw, now) {
+  const env = load(raw, now || SEP30);
+  return { U: env.RB.util, S: env.RB.store, st: env.RB.store.state(), clock: env.clock, data: env.data };
+}
+const planOf = (raw, bank, now) => { const { U, st } = setup(raw, now); return U.dayPlan(st, bank, now || SEP30); };
+const NAMES3 = { snelheid: 'Snelheid', voorrang: 'Voorrang', verlichting: 'Verlichting', gedrag: 'Gedrag' };
+const readyOf = (raw, bank, now) => { const { U, st } = setup(raw, now); return U.readiness(st, bank, now || SEP30, (t) => NAMES3[t] || t); };
+const MOCK = 'proefexamen (30 min, zorg dat je niet gestoord wordt)';
+
+// --- Plan: formule (AC-17 … AC-19) ---
+test('AC-17: D = 15, U = 120 geeft 15 nieuwe (R = 7, ⌈120/8⌉)', () => {
+  const r = load().RB.util.planRules({ mode: 'datum', days: 15 }, 120);
+  assert.strictEqual(r.R, 7);
+  assert.strictEqual(r.perDay, 15);
+  assert.strictEqual(r.shortfall, false);
+});
+test('AC-17: volgende dag D = 14, U = 105 geeft weer 15 nieuwe (R = 7, ⌈105/7⌉), geen sprong', () => {
+  const r = load().RB.util.planRules({ mode: 'datum', days: 14 }, 105);
+  assert.strictEqual(r.R, 7);
+  assert.strictEqual(r.perDay, 15);
+});
+test('AC-17: D = 35, U = 200 geeft 10 nieuwe (R = 14, ⌈200/21⌉)', () => {
+  const r = load().RB.util.planRules({ mode: 'datum', days: 35 }, 200);
+  assert.strictEqual(r.R, 14);
+  assert.strictEqual(r.perDay, 10);
+});
+test('AC-17: dayPlan met datum 15 oktober op 30 september en 120 nooit geziene: 15 nieuw; op 1 oktober na 15 gezien weer 15', () => {
+  const bank = mk('snelheid', 120);
+  const p1 = planOf({ version: 3, examDate: '2026-10-15' }, bank);
+  assert.strictEqual(p1.rules.D, 15);
+  assert.strictEqual(p1.unseen, 120);
+  assert.strictEqual(p1.fresh.length, 15);
+  const p2 = planOf({ version: 3, examDate: '2026-10-15', seen: seenOn(idsOf(bank.slice(0, 15)), '2026-09-30') }, bank, T(2026, 10, 1));
+  assert.strictEqual(p2.rules.D, 14);
+  assert.strictEqual(p2.unseen, 105);
+  assert.strictEqual(p2.fresh.length, 15);
+  assert.ok(p2.fresh.every((id) => +id.split('-')[1] >= 15), 'alleen nog niet geziene');
+});
+test('AC-18: D = 4, U = 10 geeft 5 nieuwe (R = 2, ⌈10/2⌉)', () => {
+  const r = load().RB.util.planRules({ mode: 'datum', days: 4 }, 10);
+  assert.strictEqual(r.R, 2);
+  assert.strictEqual(r.perDay, 5);
+});
+test('AC-19: D = 15, U = 200 geeft 20 nieuwe (plafond, niet 25) en de waarschuwing', () => {
+  const U = load().RB.util;
+  const r = U.planRules({ mode: 'datum', days: 15 }, 200);
+  assert.strictEqual(r.perDay, 20);
+  assert.strictEqual(r.shortfall, true);
+  same(U.planNotes(r), ['Je haalt niet alle nieuwe vragen vóór je examen; overweeg een latere datum.']);
+});
+test('AC-19: precies op het plafond (⌈U/(D−R)⌉ = 20) is geen tekort; 21 wel', () => {
+  const U = load().RB.util;
+  const at20 = U.planRules({ mode: 'datum', days: 15 }, 160);
+  assert.strictEqual(at20.perDay, 20);
+  assert.strictEqual(at20.shortfall, false);
+  assert.deepStrictEqual(U.planNotes(at20).length, 0);
+  assert.strictEqual(U.planRules({ mode: 'datum', days: 15 }, 161).shortfall, true);
+});
+test('AC-19: het tekort schuift niet door: een gemiste dag (D 15 → 14, U blijft 200) blijft 20, niet 40', () => {
+  const bank = mk('snelheid', 200);
+  const p1 = planOf({ version: 3, examDate: '2026-10-15' }, bank);
+  const p2 = planOf({ version: 3, examDate: '2026-10-15' }, bank, T(2026, 10, 1));
+  assert.strictEqual(p1.fresh.length, 20);
+  assert.strictEqual(p2.rules.D, 14);
+  assert.strictEqual(p2.fresh.length, 20);
+  assert.ok(p2.rules.shortfall);
+});
+test('AC-19: geen waarschuwing zonder examendatum, ook niet met veel nooit geziene', () => {
+  const U = load().RB.util;
+  const r = U.planRules({ mode: 'geen' }, 243);
+  assert.strictEqual(r.perDay, 10);
+  assert.strictEqual(r.shortfall, false);
+  same(U.planNotes(r), ['Nog geen examendatum: 10 nieuwe vragen per dag.']);
+});
+
+// --- Plan: randgevallen van de formule ---
+test('plan: U = 0 geeft 0 nieuwe en geen tekort, ook bij D = 2', () => {
+  const U = load().RB.util;
+  for (const days of [2, 15, 60]) {
+    const r = U.planRules({ mode: 'datum', days }, 0);
+    assert.strictEqual(r.perDay, 0, 'D ' + days);
+    assert.strictEqual(r.shortfall, false, 'D ' + days);
+  }
+});
+test('plan: D = 2 en D = 3 (R = 1): deler 1 en 2; kleine U blijft klein', () => {
+  const U = load().RB.util;
+  assert.strictEqual(U.planRules({ mode: 'datum', days: 2 }, 7).perDay, 7);
+  assert.strictEqual(U.planRules({ mode: 'datum', days: 3 }, 7).perDay, 4);
+  const r2 = U.planRules({ mode: 'datum', days: 2 }, 50);
+  assert.strictEqual(r2.perDay, 20);
+  assert.ok(r2.shortfall);
+});
+test('plan: reserve R = min(14, floor(D/2)) rond D = 28 en 29', () => {
+  const U = load().RB.util;
+  assert.strictEqual(U.planRules({ mode: 'datum', days: 28 }, 140).R, 14);
+  assert.strictEqual(U.planRules({ mode: 'datum', days: 28 }, 140).perDay, 10);
+  assert.strictEqual(U.planRules({ mode: 'datum', days: 29 }, 150).perDay, 10);
+  assert.strictEqual(U.planRules({ mode: 'datum', days: 100 }, 243).R, 14);
+});
+test('plan: plafonds fouten 10 (D ≥ 15) / 20 (D ≤ 14), kaarten 10, proefexamen 7 / 4 / 2', () => {
+  const U = load().RB.util;
+  const r = (days) => U.planRules({ mode: 'datum', days }, 100);
+  assert.strictEqual(r(15).mistakes, 10);
+  assert.strictEqual(r(14).mistakes, 20);
+  assert.strictEqual(r(2).mistakes, 20);
+  for (const d of [2, 14, 15, 42, 43, 200]) assert.strictEqual(r(d).due, 10, 'kaarten D ' + d);
+  assert.strictEqual(r(43).mockEvery, 7);
+  assert.strictEqual(r(42).mockEvery, 4);
+  assert.strictEqual(r(15).mockEvery, 4);
+  assert.strictEqual(r(14).mockEvery, 2);
+  assert.strictEqual(r(2).mockEvery, 2);
+  const geen = U.planRules({ mode: 'geen' }, 100);
+  assert.deepStrictEqual([geen.perDay, geen.mistakes, geen.due, geen.mockEvery], [10, 10, 10, 7]);
+});
+test('plan: voorbije precieze datum en voorbije maand rekenen als "niet gepland"', () => {
+  const U = load().RB.util;
+  const past = U.planRules(U.examInfo('2026-09-29', null, SEP30), 50);
+  assert.strictEqual(past.mode, 'geen');
+  assert.strictEqual(past.perDay, 10);
+  const ended = U.planRules(U.examInfo(null, '2026-08', SEP30), 50);
+  assert.strictEqual(ended.mode, 'geen');
+});
+test('plan: maandmodus over de 1e: 31 okt 23:59 nog plan naar 1 nov (D = 1, formule), 1 nov 00:00 onderhoud', () => {
+  const U = load().RB.util;
+  const before = U.planRules(U.examInfo(null, '2026-11', T(2026, 10, 31, 23, 59)), 10);
+  assert.strictEqual(before.mode, 'maand');
+  assert.strictEqual(before.D, 1);
+  assert.strictEqual(before.perDay, 10, 'maand D = 1 volgt de formule, niet de AC-25-regel');
+  assert.strictEqual(before.mistakes, 20);
+  assert.strictEqual(before.mockEvery, 2);
+  const on = U.planRules(U.examInfo(null, '2026-11', T(2026, 11, 1, 0, 0)), 10);
+  assert.strictEqual(on.mode, 'onderhoud');
+  assert.strictEqual(on.perDay, 0);
+  assert.strictEqual(U.planRules(U.examInfo(null, '2026-11', T(2026, 11, 30, 23, 59)), 10).mode, 'onderhoud');
+  assert.strictEqual(U.planRules(U.examInfo(null, '2026-11', T(2026, 12, 1, 0, 0)), 10).mode, 'geen');
+});
+test('plan: maand vóór de 1e met tekort toont alleen de tekortregel (geen modusregel)', () => {
+  const U = load().RB.util;
+  const r = U.planRules(U.examInfo(null, '2026-10', T(2026, 9, 25)), 200); // D = 6
+  assert.strictEqual(r.mode, 'maand');
+  same(U.planNotes(r), ['Je haalt niet alle nieuwe vragen vóór je examen; overweeg een latere datum.']);
+});
+test('plan: precieze datum om middernacht: 30 sep 23:59 is D = 2 (nieuw + proefexamen), 1 okt 00:00 is D = 1', () => {
+  const U = load().RB.util;
+  const d2 = U.planRules(U.examInfo('2026-10-02', null, T(2026, 9, 30, 23, 59)), 10);
+  assert.strictEqual(d2.D, 2);
+  assert.strictEqual(d2.perDay, 10);
+  assert.strictEqual(d2.mockEvery, 2);
+  const d1 = U.planRules(U.examInfo('2026-10-02', null, T(2026, 10, 1, 0, 0)), 10);
+  assert.strictEqual(d1.D, 1);
+  assert.strictEqual(d1.perDay, 0);
+  assert.strictEqual(d1.mockEvery, 0);
+});
+
+// --- Plan: inhoud (AC-20 … AC-22) ---
+test('AC-20: nooit geziene voorrangssituaties tellen in U en komen als nieuwe vraag in het plan', () => {
+  const bank = mk('snelheid', 5).concat(mk('voorrang', 5, 'voorrang'));
+  const p = planOf({ version: 3, mistakes: mis(['snelheid-0'], T(2026, 9, 20)) }, bank);
+  assert.strictEqual(p.unseen, 9);
+  assert.ok(p.fresh.includes('voorrang-0') && p.fresh.filter((id) => /^voorrang/.test(id)).length === 5, JSON.stringify(p.fresh));
+});
+test('AC-20: een voorrangssituatie met een (oude) kaart komt nooit bij de kaarten', () => {
+  const bank = mk('voorrang', 2, 'voorrang').concat(mk('borden', 2, 'sign'));
+  const p = planOf({ version: 3, srs: cards(idsOf(bank), T(2026, 9, 29)) }, bank);
+  same(p.due, ['borden-0', 'borden-1']);
+});
+test('AC-20: voorrang die vóór deze functie al eens gedaan was (done, geen seen) telt als nooit gezien', () => {
+  const bank = mk('voorrang', 3, 'voorrang');
+  const p = planOf({ version: 3, done: { 'voorrang-0': true, 'voorrang-1': false } }, bank);
+  assert.strictEqual(p.unseen, 3);
+});
+test('plan: nieuwe vragen eerst uit het onderwerp met de meeste open fouten', () => {
+  const bank = mk('snelheid', 12).concat(mk('voorrang', 12, 'voorrang'));
+  const raw = { version: 3, mistakes: mis(['voorrang-0', 'voorrang-1', 'snelheid-0'], T(2026, 9, 20)) };
+  const p = planOf(raw, bank);
+  assert.strictEqual(p.weak, 'voorrang');
+  assert.ok(p.fresh.slice(0, 10).every((id) => /^voorrang/.test(id)), JSON.stringify(p.fresh));
+});
+test('AC-21: A (streak 1, gisteren goed), B (fout 20 sep), C (fout 25 sep) → A, B, C', () => {
+  const { U, st } = setup({ version: 3, mistakes: {
+    A: { count: 1, streak: 1, okDay: '2026-09-29', last: T(2026, 9, 28) },
+    B: { count: 1, streak: 0, last: T(2026, 9, 20) },
+    C: { count: 1, streak: 0, last: T(2026, 9, 25) }
+  } });
+  same(U.orderMistakes(st.mistakes, ['C', 'A', 'B'], '2026-09-30'), ['A', 'B', 'C']);
+  const bank = [{ id: 'C', topic: 't', kind: 'mc' }, { id: 'B', topic: 't', kind: 'mc' }, { id: 'A', topic: 't', kind: 'mc' }];
+  same(U.dayPlan(st, bank, SEP30).mistakes, ['A', 'B', 'C']);
+});
+test('AC-21: fout zonder `last` telt als oudste; streak 1 van vandaag zit niet in het plan (AC-16)', () => {
+  const { U, st } = setup({ version: 3, mistakes: {
+    nu: { count: 1, streak: 1, okDay: '2026-09-30', last: T(2026, 9, 1) },
+    oud: { count: 1, streak: 0, last: T(2026, 9, 10) },
+    geen: { count: 1 }
+  } });
+  same(U.orderMistakes(st.mistakes, ['oud', 'geen'], '2026-09-30'), ['geen', 'oud']);
+  const bank = ['nu', 'oud', 'geen'].map((id) => ({ id, topic: 't', kind: 'mc' }));
+  same(U.dayPlan(st, bank, SEP30).mistakes, ['geen', 'oud']);
+});
+test('AC-21: plafond 10 neemt de eerste 10 in AC-21-volgorde; opgeloste en verwijderde fouten doen niet mee', () => {
+  const bank = mk('gedrag', 14);
+  const ms = {};
+  bank.forEach((x, i) => { ms[x.id] = { count: 1, streak: 0, last: T(2026, 9, 1 + i) }; });
+  ms['gedrag-13'] = { count: 1, streak: 1, okDay: '2026-09-29', last: T(2026, 9, 29) };
+  ms['gedrag-0'] = { count: 1, streak: 2, resolved: true, okDay: '2026-09-02', last: T(2026, 9, 1) };
+  ms['weg-1'] = { count: 1, streak: 0, last: T(2026, 8, 1) };
+  const p = planOf({ version: 3, mistakes: ms }, bank);
+  same(p.mistakes, ['gedrag-13', 'gedrag-1', 'gedrag-2', 'gedrag-3', 'gedrag-4', 'gedrag-5', 'gedrag-6', 'gedrag-7', 'gedrag-8', 'gedrag-9']);
+});
+test('AC-22: terug na 26 sep, D = 35, U = 200, 35 fouten, 40 kaarten → 10 + 10 + 10 en "Welkom terug." zonder achterstand', () => {
+  const fresh = mk('snelheid', 200), wrong = mk('gedrag', 35), due = mk('borden', 40, 'sign');
+  const bank = fresh.concat(wrong, due);
+  const raw = {
+    version: 3, examDate: '2026-11-04',
+    mistakes: mis(idsOf(wrong), T(2026, 9, 26, 10), { topic: 'gedrag' }),
+    srs: cards(idsOf(due), T(2026, 9, 27, 0)),
+    seen: seenOn(idsOf(wrong).concat(idsOf(due)), '2026-09-26'),
+    history: { gedrag: hist('gedrag', 20, 0, '2026-09-26') },
+    exams: [exam(40, T(2026, 9, 26, 9))]
+  };
+  const { U, st } = setup(raw);
+  const p = U.dayPlan(st, bank, SEP30);
+  assert.strictEqual(p.rules.D, 35);
+  assert.strictEqual(p.unseen, 200);
+  assert.deepStrictEqual([p.fresh.length, p.mistakes.length, p.due.length, p.total], [10, 10, 10, 30]);
+  assert.strictEqual(p.welcome, true);
+  assert.strictEqual(p.mock, true, 'cadans 4, laatste 26 sep');
+  const s = U.todayStatus({ target: p.target, practised: 0, mock: p.mock, mockDone: false, available: p.target, welcome: p.welcome });
+  assert.strictEqual(s.line, 'Welkom terug. Vandaag: 15 vragen (± 10 min) + ' + MOCK);
+  assert.ok(!/35|40/.test(s.line));
+  assert.strictEqual(U.planDetail(p.mistakes.length, p.due.length, p.fresh.length, ''), '10 fouten · 10 kaarten · 10 nieuwe vragen');
+});
+test('AC-22: "Welkom terug." alleen als de laatste activiteit van vóór gisteren is', () => {
+  const bank = mk('snelheid', 5);
+  const w = (seen) => planOf({ version: 3, seen }, bank).welcome;
+  assert.strictEqual(w({ 'snelheid-0': '2026-09-28' }), true, 'eergisteren');
+  assert.strictEqual(w({ 'snelheid-0': '2026-09-29' }), false, 'gisteren');
+  assert.strictEqual(w({ 'snelheid-0': '2026-09-30' }), false, 'vandaag');
+  assert.strictEqual(w({}), false, 'nooit iets gedaan: geen welkom');
+  assert.strictEqual(w({ 'snelheid-0': '2026-09-20', 'snelheid-1': '2026-09-30' }), false, 'nieuwste dag telt');
+});
+test('AC-22: laatste activiteit komt uit history én seen (flashcard vandaag = geen welkom)', () => {
+  const { U, st } = setup({ version: 3, history: { gedrag: hist('gedrag', 3, 1, '2026-09-26') }, seen: { k: '2026-09-30' } });
+  assert.strictEqual(U.lastActivity(st), '2026-09-30');
+  const { U: U2, st: st2 } = setup({ version: 3, history: { gedrag: hist('gedrag', 3, 1, '2026-09-26') } });
+  assert.strictEqual(U2.lastActivity(st2), '2026-09-26');
+  assert.strictEqual(U2.lastActivity({ history: { x: [null, { day: '2026-02-31' }, { day: 5 }] }, seen: { a: 'nope' } }), null);
+});
+test('AC-22: "Welkom terug." verdwijnt zodra er vandaag iets gedaan is', () => {
+  const U = load().RB.util;
+  assert.strictEqual(U.todayStatus({ target: 30, practised: 0, available: 30, welcome: true }).line, 'Welkom terug. Vandaag: 30 vragen (± 15 min)');
+  assert.strictEqual(U.todayStatus({ target: 30, practised: 1, available: 29, welcome: true }).line, 'Vandaag: 30 vragen (± 15 min) · 1 gedaan');
+});
+
+// --- Proefexamen-ritme (AC-23, AC-24) ---
+test('AC-23: nooit een proefexamen → vandaag aan de beurt als nulmeting', () => {
+  const p = planOf({ version: 3 }, mk('snelheid', 20));
+  assert.strictEqual(p.mock, true);
+  assert.strictEqual(p.nulmeting, true);
+  const q = planOf({ version: 3, exams: [exam(40, T(2026, 9, 1))] }, mk('snelheid', 20));
+  assert.strictEqual(q.mock, true, '29 dagen geleden, cadans 7');
+  assert.strictEqual(q.nulmeting, false);
+});
+test('AC-23: cadans 4, laatste 27 sep: niet op 30 sep, wel op 1 okt, nog steeds op 2 okt', () => {
+  const U = load().RB.util;
+  const exams = [exam(40, T(2026, 9, 27, 20))];
+  const rules = { mockEvery: 4 };
+  assert.strictEqual(U.mockDue(rules, exams, '2026-09-30'), false);
+  assert.strictEqual(U.mockDue(rules, exams, '2026-10-01'), true);
+  assert.strictEqual(U.mockDue(rules, exams, '2026-10-02'), true);
+  const raw = { version: 3, examDate: '2026-11-01', exams };
+  const bank = mk('snelheid', 50);
+  const p30 = planOf(raw, bank, SEP30), p1 = planOf(raw, bank, T(2026, 10, 1)), p2 = planOf(raw, bank, T(2026, 10, 2));
+  assert.deepStrictEqual([p30.rules.mockEvery, p1.rules.mockEvery, p2.rules.mockEvery], [4, 4, 4]);
+  assert.deepStrictEqual([p30.mock, p1.mock, p2.mock], [false, true, true]);
+});
+test('AC-23: een doorgeschoven proefexamen heeft dezelfde tekst (geen herinnering of "te laat")', () => {
+  const U = load().RB.util;
+  const o = { target: 6, practised: 0, mock: true, mockDone: false, available: 6 };
+  const day1 = U.todayStatus(o).line, day2 = U.todayStatus(o).line;
+  assert.strictEqual(day1, 'Vandaag: 6 vragen (± 5 min) + ' + MOCK);
+  assert.strictEqual(day2, day1);
+});
+test('AC-23: een proefexamen waarbij de tijd om was, telt als laatste proefexamen', () => {
+  const U = load().RB.util;
+  const exams = [exam(40, T(2026, 9, 20)), exam(12, T(2026, 9, 29), 50, { timeUp: true })];
+  assert.strictEqual(U.mockDue({ mockEvery: 4 }, exams, '2026-09-30'), false);
+  assert.strictEqual(U.mockDue({ mockEvery: 0 }, [], '2026-09-30'), false, 'mockEvery 0: nooit, ook geen nulmeting');
+});
+test('AC-23: examens met kapotte datum tellen niet als laatste proefexamen', () => {
+  const U = load().RB.util;
+  assert.strictEqual(U.mockDue({ mockEvery: 7 }, [{ date: 'x' }, null, { date: NaN }], '2026-09-30'), true);
+});
+test('AC-24: plan van 30 vragen met proefexamen → doel 15, "Vandaag: 15 vragen (± 10 min) + proefexamen (…)"', () => {
+  const bank = mk('snelheid', 200).concat(mk('gedrag', 10), mk('borden', 10, 'sign'));
+  const raw = { version: 3, examDate: '2026-11-04', mistakes: mis(idsOf(mk('gedrag', 10)), T(2026, 9, 29)), srs: cards(idsOf(mk('borden', 10, 'sign')), T(2026, 9, 29)) };
+  const { U, st } = setup(raw);
+  const p = U.dayPlan(st, bank, SEP30);
+  assert.strictEqual(p.total, 30);
+  assert.strictEqual(p.mock, true);
+  assert.strictEqual(p.target, 15);
+  same(p.order.slice(0, 15), p.mistakes.concat(p.due.slice(0, 5)), 'planvolgorde: fouten, kaarten, nieuwe');
+  assert.strictEqual(U.todayStatus({ target: 15, practised: 0, mock: true, mockDone: false, available: 15 }).line,
+    'Vandaag: 15 vragen (± 10 min) + proefexamen (30 min, zorg dat je niet gestoord wordt)');
+});
+test('AC-24: zonder proefexamen blijft het 30 vragen, "± 15 min"', () => {
+  const bank = mk('snelheid', 200).concat(mk('gedrag', 10), mk('borden', 10, 'sign'));
+  const raw = { version: 3, examDate: '2026-11-04', exams: [exam(40, T(2026, 9, 29))],
+    mistakes: mis(idsOf(mk('gedrag', 10)), T(2026, 9, 29)), srs: cards(idsOf(mk('borden', 10, 'sign')), T(2026, 9, 29)) };
+  const { U, st } = setup(raw);
+  const p = U.dayPlan(st, bank, SEP30);
+  assert.strictEqual(p.mock, false);
+  assert.strictEqual(p.target, 30);
+  assert.strictEqual(U.todayStatus({ target: 30, practised: 0, mock: false, available: 30 }).line, 'Vandaag: 30 vragen (± 15 min)');
+});
+test('AC-24: halveren rondt naar boven af (31 → 16, 1 → 1)', () => {
+  const bank = mk('snelheid', 7);
+  const p = planOf({ version: 3 }, bank); // niet gepland: 7 nieuwe, nulmeting
+  assert.deepStrictEqual([p.total, p.mock, p.target], [7, true, 4]);
+  const one = planOf({ version: 3, mistakes: mis(['snelheid-0'], T(2026, 9, 1)), seen: seenOn(idsOf(bank), '2026-09-01') }, bank);
+  assert.strictEqual(one.total, 1);
+  assert.strictEqual(one.target, 1);
+});
+test('minuten: 30 s per vraag, naar boven op 5 minuten; minstens 5 bij 1 vraag', () => {
+  const { minutes } = load().RB.util;
+  same([0, 1, 10, 11, 15, 20, 21, 30].map(minutes), [0, 5, 5, 10, 10, 10, 15, 15]);
+});
+
+// --- Eindspurt en onderhoud (AC-25, AC-26) ---
+test('AC-25: datum morgen (D = 1) met 14 open fouten: alleen die 14, geen nieuwe, geen kaarten, geen proefexamen', () => {
+  const wrong = mk('gedrag', 14);
+  const bank = wrong.concat(mk('snelheid', 50), mk('borden', 5, 'sign'));
+  const raw = { version: 3, examDate: '2026-10-01', mistakes: mis(idsOf(wrong), T(2026, 9, 20)), srs: cards(idsOf(mk('borden', 5, 'sign')), T(2026, 9, 29)) };
+  const { U, st } = setup(raw);
+  const p = U.dayPlan(st, bank, SEP30);
+  assert.strictEqual(p.rules.D, 1);
+  assert.deepStrictEqual([p.mistakes.length, p.due.length, p.fresh.length, p.total, p.target], [14, 0, 0, 14, 14]);
+  assert.strictEqual(p.mock, false, 'ook geen nulmeting');
+  same(U.planNotes(p.rules), ['Morgen is je examen. Vandaag alleen je open fouten, geen nieuwe vragen en geen proefexamen.']);
+});
+test('AC-25: D = 1 met 25 open fouten: hoogstens 20', () => {
+  const wrong = mk('gedrag', 25);
+  assert.strictEqual(planOf({ version: 3, examDate: '2026-10-01', mistakes: mis(idsOf(wrong), T(2026, 9, 20)) }, wrong).mistakes.length, 20);
+});
+test('AC-25: datum vandaag (D = 0): hoogstens 10 open fouten, geen proefexamen', () => {
+  const wrong = mk('gedrag', 14);
+  const { U, st } = setup({ version: 3, examDate: '2026-09-30', mistakes: mis(idsOf(wrong), T(2026, 9, 20)) });
+  const p = U.dayPlan(st, wrong.concat(mk('snelheid', 10)), SEP30);
+  assert.strictEqual(p.rules.D, 0);
+  assert.deepStrictEqual([p.mistakes.length, p.fresh.length, p.due.length], [10, 0, 0]);
+  assert.strictEqual(p.mock, false);
+  same(U.planNotes(p.rules), ['Vandaag is je examen. Wil je nog iets doen? Herhaal dan alleen een paar fouten.']);
+});
+test('AC-25: D ≤ 1 zonder open fouten: "Geen open fouten meer. Rust goed uit en succes!"', () => {
+  const U = load().RB.util;
+  const s = U.todayStatus({ target: 0, practised: 0, mock: false, mockDone: false, available: 0, rest: true });
+  assert.strictEqual(s.state, 'rust');
+  assert.strictEqual(s.line, 'Geen open fouten meer. Rust goed uit en succes!');
+});
+test('AC-26: maand november op 2 november: onderhoud, geen nieuwe, fouten max 20, kaarten max 10, om de 2 dagen', () => {
+  const wrong = mk('gedrag', 25), due = mk('borden', 15, 'sign');
+  const bank = wrong.concat(due, mk('snelheid', 50));
+  const raw = { version: 3, examMonth: '2026-11', mistakes: mis(idsOf(wrong), T(2026, 10, 20)), srs: cards(idsOf(due), T(2026, 11, 1)), exams: [exam(45, T(2026, 10, 31))] };
+  const { U, st } = setup(raw, T(2026, 11, 2));
+  const p = U.dayPlan(st, bank, T(2026, 11, 2));
+  assert.strictEqual(p.rules.mode, 'onderhoud');
+  assert.deepStrictEqual([p.fresh.length, p.mistakes.length, p.due.length], [0, 20, 10]);
+  assert.strictEqual(p.rules.mockEvery, 2);
+  assert.strictEqual(p.mock, true, 'laatste 31 okt, 2 dagen');
+  same(U.planNotes(p.rules), ['Je examen kan nu elke dag zijn. Daarom geen nieuwe vragen meer: alleen herhalen, en om de 2 dagen een proefexamen.']);
+  const q = planOf(Object.assign({}, raw, { exams: [exam(45, T(2026, 11, 1))] }), bank, T(2026, 11, 2));
+  assert.strictEqual(q.mock, false, 'laatste 1 nov, 1 dag');
+});
+
+// --- Doelregel en "gedaan" (AC-27, AC-28) ---
+test('AC-27: "Vandaag: 30 vragen (± 15 min) · 12 gedaan"', () => {
+  const s = load().RB.util.todayStatus({ target: 30, practised: 12, mock: false, available: 18 });
+  assert.strictEqual(s.state, 'bezig');
+  assert.strictEqual(s.line, 'Vandaag: 30 vragen (± 15 min) · 12 gedaan');
+});
+test('AC-27: vragen klaar, proefexamen nog niet: proefexamen blijft in de regel', () => {
+  const s = load().RB.util.todayStatus({ target: 15, practised: 15, mock: true, mockDone: false, available: 0 });
+  assert.strictEqual(s.state, 'examen');
+  assert.strictEqual(s.mockLeft, true);
+  assert.strictEqual(s.line, 'Vandaag: 15 vragen (± 10 min) + ' + MOCK + ' · 15 gedaan');
+});
+test('AC-27: vragen en proefexamen klaar: "Doel van vandaag gehaald · 32 gedaan"', () => {
+  const U = load().RB.util;
+  const a = U.todayStatus({ target: 15, practised: 32, mock: true, mockDone: true, available: 0 });
+  assert.strictEqual(a.state, 'gehaald');
+  assert.strictEqual(a.line, 'Doel van vandaag gehaald · 32 gedaan');
+  const b = U.todayStatus({ target: 30, practised: 30, mock: false, available: 0 });
+  assert.strictEqual(b.line, 'Doel van vandaag gehaald · 30 gedaan');
+});
+test('AC-27: proefexamen klaar maar vragen niet: nog bezig, zonder proefexamen in de regel', () => {
+  const s = load().RB.util.todayStatus({ target: 15, practised: 3, mock: true, mockDone: true, available: 12 });
+  assert.strictEqual(s.state, 'bezig');
+  assert.strictEqual(s.line, 'Vandaag: 15 vragen (± 10 min) · 3 gedaan');
+});
+test('AC-27: doel 0 met proefexamen: "Vandaag: proefexamen (…)"; doel 0 zonder iets: niets klaar', () => {
+  const U = load().RB.util;
+  assert.strictEqual(U.todayStatus({ target: 0, practised: 0, mock: true, mockDone: false, available: 0 }).line, 'Vandaag: ' + MOCK);
+  const leeg = U.todayStatus({ target: 0, practised: 0, mock: false, available: 0 });
+  assert.strictEqual(leeg.state, 'leeg');
+  assert.strictEqual(leeg.line, 'Vandaag staat er niets klaar. Doe een proefexamen of kom morgen terug.');
+});
+test('AC-27: enkelvoud "1 vraag"', () => {
+  assert.strictEqual(load().RB.util.todayStatus({ target: 1, practised: 0, available: 1 }).line, 'Vandaag: 1 vraag (± 5 min)');
+});
+test('AC-27/AC-2: "gedaan" telt het eerste antwoord per vraag per dag, uit elke sessie', () => {
+  const { S } = setup({ version: 3 });
+  S.setToday(30, false);
+  S.recordAnswer({ id: 'a', topic: 'snelheid' }, true);
+  S.recordAnswer({ id: 'a', topic: 'snelheid' }, false);
+  S.recordAnswer({ id: 'a', topic: 'snelheid' }, true);
+  assert.strictEqual(S.today().practised, 1, 'dezelfde vraag 3× is 1 gedaan');
+  S.recordAnswer({ id: 'b', topic: 'borden' }, false, 'x');
+  S.recordAnswer({ id: 'c', topic: 'voorrang' }, true);
+  assert.strictEqual(S.today().practised, 3);
+});
+test('AC-27: antwoorden uit een proefexamen tellen niet als "gedaan" (wel history, seen en fouten)', () => {
+  const { S } = setup({ version: 3 });
+  S.setToday(10, true);
+  S.recordAnswer({ id: 'e1', topic: 'snelheid' }, true, null, true);
+  S.recordAnswer({ id: 'e2', topic: 'snelheid' }, false, 'x', true);
+  const st = S.state();
+  assert.strictEqual(S.today().practised, 0);
+  assert.strictEqual(st.history.snelheid.length, 2);
+  assert.ok(st.seen.e1 && st.seen.e2);
+  assert.deepStrictEqual(S.openMistakes(), ['e2']);
+});
+test('AC-27: flashcard-zelfbeoordeling telt niet als "gedaan"', () => {
+  const { S } = setup({ version: 3 });
+  S.setToday(10, false);
+  S.recordStat(true, 'kaart-1');
+  assert.strictEqual(S.today().practised, 0);
+});
+test('AC-27: zonder vastgezet doel voor vandaag telt recordAnswer niet; de app zet het doel eerst vast (ensureToday)', () => {
+  const { S } = setup({ version: 3, today: { day: '2026-09-29', target: 10, mock: false, practised: 10 } });
+  S.recordAnswer({ id: 'bord-x', topic: 'borden' }, true);
+  assert.strictEqual(S.today(), null, 'doel van gisteren geldt niet vandaag');
+  assert.strictEqual(S.state().today.practised, 10, 'gisteren wordt niet opgehoogd');
+  S.setToday(20, false); // wat app.js doet vóór elk antwoord in een sessie
+  S.recordAnswer({ id: 'bord-y', topic: 'borden' }, true);
+  same(S.today(), { day: '2026-09-30', target: 20, mock: false, practised: 1 });
+});
+// BUG (zie rapport): na een proefexamen bestaat het plan eerst uit de net gemaakte examenfouten, maar die tellen
+// niet als "gedaan" (eerste antwoord van de dag was in het examen). Een hele ronde "Start (5 vragen)" geeft 0 gedaan.
+test('AC-27 [BUG]: na een proefexamen telt een ronde Vandaag (uit het plan) gewoon als "gedaan"', () => {
+  const { U, S } = setup(undefined);
+  const bank = Array.from({ length: 60 }, (_, i) => ({ id: 'q' + i, topic: 't' + (i % 3), kind: 'mc' }));
+  let p = U.dayPlan(S.state(), bank, SEP30);
+  S.setToday(p.target, p.mock); // eerste gebruik: 5 vragen + nulmeting
+  bank.slice(0, 50).forEach((x, i) => S.recordAnswer(x, i >= 20, 'x', true)); // nulmeting eerst: 20 fout
+  S.addExam({ date: SEP30, score: 30, total: 50, passed: false, timeUp: false });
+  p = U.dayPlan(S.state(), bank, SEP30);
+  const round = p.order.slice(0, S.today().target - S.today().practised);
+  assert.strictEqual(round.length, 5);
+  round.forEach((id) => S.recordAnswer(bank.find((x) => x.id === id), true));
+  assert.strictEqual(S.today().practised, 5, 'ronde ' + JSON.stringify(round) + ' telde niet: "checked answers outside a mock exam" (AC-27)');
+});
+test('AC-28: doel van vandaag ligt vast; een nieuwe examendatum rekent opnieuw, "gedaan" blijft', () => {
+  const { S, clock } = setup({ version: 3 });
+  assert.strictEqual(S.today(), null, 'eerste gebruik: nog geen doel');
+  S.setToday(30, true);
+  for (const id of ['a', 'b', 'c']) S.recordAnswer({ id, topic: 'gedrag' }, true);
+  same(S.today(), { day: '2026-09-30', target: 30, mock: true, practised: 3 });
+  S.setToday(12, false); // nieuwe datum
+  same(S.today(), { day: '2026-09-30', target: 12, mock: false, practised: 3 });
+  clock.now = T(2026, 10, 1, 0, 0);
+  assert.strictEqual(S.today(), null, 'volgende dag: opnieuw uitrekenen');
+  same(S.setToday(20, true), { day: '2026-10-01', target: 20, mock: true, practised: 0 });
+});
+test('AC-28: het doel blijft 30 als fouten worden opgelost (plan krimpt, opgeslagen doel niet), ook na herladen', () => {
+  const wrong = mk('gedrag', 30);
+  const raw = { version: 3, mistakes: mis(idsOf(wrong), T(2026, 9, 20), { streak: 1, okDay: '2026-09-29' }), exams: [exam(40, T(2026, 9, 29))] };
+  const env = load(raw, SEP30);
+  const S = env.RB.store, U = env.RB.util;
+  const p = U.dayPlan(S.state(), wrong, SEP30);
+  S.setToday(p.target, p.mock);
+  assert.strictEqual(S.today().target, 10, 'plafond 10 zonder datum');
+  for (const x of wrong.slice(0, 10)) S.recordAnswer(x, true); // opgelost (gisteren al goed)
+  assert.strictEqual(U.dayPlan(S.state(), wrong, SEP30).mistakes.length, 10, 'het plan schuift door');
+  assert.strictEqual(S.today().target, 10);
+  assert.strictEqual(S.today().practised, 10);
+  const again = load(env.data['rijbewijs-b-v1'], SEP30 + HOUR).RB.store;
+  same(again.today(), { day: '2026-09-30', target: 10, mock: false, practised: 10 });
+});
+test('AC-28: setToday met rommel: NaN/negatief → 0, kommagetal naar beneden, mock als boolean', () => {
+  const { S } = setup({ version: 3 });
+  assert.strictEqual(S.setToday('abc', 'ja').target, 0);
+  assert.strictEqual(S.today().mock, true);
+  assert.strictEqual(S.setToday(-5, 0).target, 0);
+  assert.strictEqual(S.today().mock, false);
+  assert.strictEqual(S.setToday(12.7).target, 12);
+  assert.strictEqual(S.setToday(Infinity).target, 0);
+});
+
+// --- Plan-detail ---
+test('plandetail: "5 fouten · 4 kaarten · 6 nieuwe vragen (vooral voorrang)", enkelvoud en weglaten', () => {
+  const { planDetail } = load().RB.util;
+  assert.strictEqual(planDetail(5, 4, 6, 'voorrang'), '5 fouten · 4 kaarten · 6 nieuwe vragen (vooral voorrang)');
+  assert.strictEqual(planDetail(1, 1, 1, ''), '1 fout · 1 kaart · 1 nieuwe vraag');
+  assert.strictEqual(planDetail(0, 3, 0, 'voorrang'), '3 kaarten');
+  assert.strictEqual(planDetail(0, 0, 0, ''), '');
+});
+
+// --- Klaar voor het examen? (AC-29 … AC-32, AC-34) ---
+const RBANK = mk('snelheid', 3).concat(mk('voorrang', 3, 'voorrang'));
+const readyRaw = () => ({ version: 3, history: { snelheid: hist('snelheid', 20, 20), voorrang: hist('voorrang', 20, 18) }, exams: [exam(46, T(2026, 9, 20)), exam(47, T(2026, 9, 25)), exam(50, T(2026, 9, 29))] });
+test('AC-29/AC-31: alle drie gehaald → "Klaar volgens deze app" met cijfers per eis', () => {
+  const r = readyOf(readyRaw(), RBANK);
+  assert.strictEqual(r.status, 'klaar');
+  assert.strictEqual(r.headline, 'Klaar volgens deze app');
+  assert.strictEqual(r.eis1.text, 'Laatste 3: 46, 47, 50');
+  assert.strictEqual(r.eis2.text, 'Alle 2 onderwerpen 90% of meer');
+  assert.strictEqual(r.eis3.text, 'Geen open fouten');
+  assert.ok(r.eis1.met && r.eis2.met && r.eis3.met);
+});
+test('AC-29: eis 1 "2 van 3 gedaan, laagste 45" en "0 van 3 gedaan"', () => {
+  const raw = readyRaw();
+  raw.exams = [exam(47, T(2026, 9, 20)), exam(45, T(2026, 9, 25))];
+  assert.strictEqual(readyOf(raw, RBANK).eis1.text, '2 van 3 gedaan, laagste 45');
+  raw.exams = [];
+  assert.strictEqual(readyOf(raw, RBANK).eis1.text, '0 van 3 gedaan');
+});
+test('AC-29: eis 1 met 3 gedaan en niet gehaald: "Laatste 3: 47, 45, 48 (laagste 45)", oudste eerst', () => {
+  const raw = readyRaw();
+  raw.exams = [exam(30, T(2026, 9, 1)), exam(47, T(2026, 9, 20)), exam(45, T(2026, 9, 25)), exam(48, T(2026, 9, 29))];
+  const r = readyOf(raw, RBANK);
+  assert.strictEqual(r.eis1.text, 'Laatste 3: 47, 45, 48 (laagste 45)');
+  assert.strictEqual(r.eis1.met, false);
+});
+test('AC-29: eis 3 op 30 september: "3 fouten van vóór 28 september" (zonder last telt als oud, 28 sep niet)', () => {
+  const bank = RBANK.concat(mk('gedrag', 5));
+  const raw = readyRaw();
+  raw.mistakes = {
+    'gedrag-0': { count: 1, last: T(2026, 9, 27, 23, 59) },
+    'gedrag-1': { count: 1, last: T(2026, 9, 20) },
+    'gedrag-2': { count: 1 },
+    'gedrag-3': { count: 1, last: T(2026, 9, 28, 0, 0) },
+    'gedrag-4': { count: 1, last: T(2026, 9, 1), streak: 2, resolved: true }
+  };
+  const r = readyOf(raw, bank);
+  assert.strictEqual(r.eis3.text, '3 fouten van vóór 28 september');
+  same(r.eis3.ids, ['gedrag-2', 'gedrag-1', 'gedrag-0'], 'oudste eerst (zonder last voorop)');
+  assert.strictEqual(r.eis3.met, false);
+});
+test('AC-29: eis 3 enkelvoud en "Geen fouten van vóór …" met alleen recente fouten', () => {
+  const bank = RBANK.concat(mk('gedrag', 2));
+  const raw = readyRaw();
+  raw.mistakes = { 'gedrag-0': { count: 1, last: T(2026, 9, 27) } };
+  assert.strictEqual(readyOf(raw, bank).eis3.text, '1 fout van vóór 28 september');
+  raw.mistakes = { 'gedrag-0': { count: 1, last: T(2026, 9, 29) } };
+  const r = readyOf(raw, bank);
+  assert.strictEqual(r.eis3.text, 'Geen fouten van vóór 28 september');
+  assert.ok(r.eis3.met);
+});
+test('AC-29: eis 3 grens over de maand: op 1 oktober is de grens 29 september', () => {
+  const r = readyOf(readyRaw(), RBANK, T(2026, 10, 1));
+  assert.strictEqual(r.eis3.cutoff, '2026-09-29');
+});
+test('AC-29: eis 2 onderwerpen laagste eerst: geen antwoorden, dan percentage, dan minder antwoorden, dan naam', () => {
+  const bank = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((t) => ({ id: t + '-0', topic: t, kind: 'mc' }));
+  const raw = { version: 3, history: {
+    e: hist('e', 20, 19), b: hist('b', 20, 10), d: hist('d', 17, 15), c: hist('c', 20, 17),
+    f: hist('f', 10, 5), g: hist('g', 0, 0)
+  } };
+  const r = readyOf(raw, bank);
+  same(r.eis2.rows.map((x) => x.topic), ['a', 'g', 'f', 'b', 'c', 'd', 'e']);
+  assert.strictEqual(r.eis2.text, '1 van 7 onderwerpen gehaald');
+});
+test('AC-30: 17 antwoorden waarvan 15 goed: "88% (15/17), nog te weinig antwoorden (17/20)", niet gehaald', () => {
+  const r = readyOf({ version: 3, history: { verlichting: hist('verlichting', 17, 15) } }, mk('verlichting', 2));
+  const row = r.eis2.rows[0];
+  assert.strictEqual(row.text, '88% (15/17), nog te weinig antwoorden (17/20)');
+  assert.strictEqual(row.met, false);
+});
+test('AC-30: 0 antwoorden: "nog geen antwoorden" (niet 0%)', () => {
+  const r = readyOf({ version: 3, exams: [exam(40)] }, mk('verlichting', 2));
+  assert.strictEqual(r.eis2.rows[0].text, 'nog geen antwoorden');
+  assert.strictEqual(r.eis2.rows[0].pct, null);
+});
+test('AC-30: grens 90%: 18/20 gehaald, 17/20 niet; 17/17 goed is nog te weinig', () => {
+  const row = (n, ok) => readyOf({ version: 3, history: { snelheid: hist('snelheid', n, ok) } }, mk('snelheid', 1)).eis2.rows[0];
+  assert.strictEqual(row(20, 18).met, true);
+  assert.strictEqual(row(20, 18).text, '90% (18/20)');
+  assert.strictEqual(row(20, 17).met, false);
+  assert.strictEqual(row(20, 17).text, '85% (17/20)');
+  assert.strictEqual(row(17, 17).met, false);
+  assert.strictEqual(row(17, 17).text, '100% (17/17), nog te weinig antwoorden (17/20)');
+});
+test('AC-30: percentage naar beneden afgerond, nooit "90%" onder de 90 (bv. 17/19 = 89%)', () => {
+  const { U } = setup({ version: 3 });
+  for (let n = 1; n <= 20; n++) {
+    for (let ok = 0; ok <= n; ok++) {
+      const s = { history: { t: hist('t', n, ok) }, exams: [], mistakes: {} };
+      const row = U.readiness(s, [{ id: 'x', topic: 't' }], SEP30).eis2.rows[0];
+      assert.strictEqual(row.pct, Math.floor((ok * 100) / n), ok + '/' + n);
+    }
+  }
+});
+test('AC-30: alleen de laatste 20 antwoorden tellen (state met 25)', () => {
+  const { U } = setup({ version: 3 });
+  const h = hist('t', 25, 0).map((x, i) => Object.assign(x, { ok: i >= 5 })); // eerste 5 fout, laatste 20 goed
+  const r = U.readiness({ history: { t: h }, exams: [], mistakes: {} }, [{ id: 'x', topic: 't' }], SEP30);
+  assert.strictEqual(r.eis2.rows[0].text, '100% (20/20)');
+});
+test('AC-31: alleen eis 1 open: "Bijna: nog 1 proefexamen met 46 of meer goed" (begint met "Bijna: nog 1 proefexamen")', () => {
+  const raw = readyRaw();
+  raw.exams = raw.exams.slice(1);
+  const r = readyOf(raw, RBANK);
+  assert.strictEqual(r.status, 'bijna');
+  assert.ok(r.headline.startsWith('Bijna: nog 1 proefexamen'));
+  assert.strictEqual(r.headline, 'Bijna: nog 1 proefexamen met 46 of meer goed');
+});
+test('AC-31: laatste 3 = 47, 45, 48 → "Bijna: nog 2 proefexamens met 46 of meer goed"; laatste < 46 → nog 3', () => {
+  const raw = readyRaw();
+  raw.exams = [exam(47, T(2026, 9, 20)), exam(45, T(2026, 9, 25)), exam(48, T(2026, 9, 29))];
+  assert.strictEqual(readyOf(raw, RBANK).headline, 'Bijna: nog 2 proefexamens met 46 of meer goed');
+  raw.exams = [exam(47, T(2026, 9, 20)), exam(48, T(2026, 9, 25)), exam(45, T(2026, 9, 29))];
+  assert.strictEqual(readyOf(raw, RBANK).headline, 'Bijna: nog 3 proefexamens met 46 of meer goed');
+});
+test('AC-31: alleen eis 2 open met 1 onderwerp: "Bijna: nog 1 onderwerp (Voorrang)"', () => {
+  const raw = readyRaw();
+  raw.history.voorrang = hist('voorrang', 20, 17);
+  assert.strictEqual(readyOf(raw, RBANK).headline, 'Bijna: nog 1 onderwerp (Voorrang)');
+});
+test('AC-31 (besluit 1): alleen eis 2 open met 13 onderwerpen: letterlijk "Bijna: nog 13 onderwerpen"', () => {
+  const topics = ['borden', 'voorrang', 'snelheid', 'alcohol', 'rijbewijs', 'parkeren', 'verlichting', 'snelweg', 'inhalen', 'weggebruikers', 'verkeerslichten', 'afstand', 'gedrag'];
+  const bank = topics.map((t) => ({ id: t + '-0', topic: t, kind: 'mc' }));
+  const raw = { version: 3, exams: [exam(46), exam(47), exam(48)], history: {} };
+  topics.forEach((t) => { raw.history[t] = hist(t, 20, 17); });
+  const r = readyOf(raw, bank);
+  assert.strictEqual(r.status, 'bijna');
+  assert.strictEqual(r.headline, 'Bijna: nog 13 onderwerpen');
+  assert.strictEqual(r.eis2.text, '0 van 13 onderwerpen gehaald');
+});
+test('AC-31: alleen eis 3 open: "Bijna: nog 1 oude fout" / "Bijna: nog 3 oude fouten"', () => {
+  const raw = readyRaw();
+  raw.mistakes = mis(['snelheid-0'], T(2026, 9, 20));
+  assert.strictEqual(readyOf(raw, RBANK).headline, 'Bijna: nog 1 oude fout');
+  raw.mistakes = mis(['snelheid-0', 'snelheid-1', 'voorrang-2'], T(2026, 9, 20));
+  assert.strictEqual(readyOf(raw, RBANK).headline, 'Bijna: nog 3 oude fouten');
+});
+test('AC-31: twee of drie eisen open: "Nog niet"', () => {
+  const raw = readyRaw();
+  raw.exams = raw.exams.slice(1);
+  raw.mistakes = mis(['snelheid-0'], T(2026, 9, 20));
+  assert.strictEqual(readyOf(raw, RBANK).headline, 'Nog niet', 'eis 1 en 3');
+  raw.history.voorrang = hist('voorrang', 5, 5);
+  const r = readyOf(raw, RBANK);
+  assert.strictEqual(r.status, 'nog-niet');
+  assert.strictEqual(r.headline, 'Nog niet');
+});
+test('AC-31: geen antwoorden en geen proefexamens: "Nog geen gegevens" (ook met oude open fouten)', () => {
+  const bank = RBANK.concat(mk('gedrag', 1));
+  const r = readyOf({ version: 3 }, bank);
+  assert.strictEqual(r.status, 'geen');
+  assert.strictEqual(r.headline, 'Nog geen gegevens');
+  assert.strictEqual(r.eis1.text, '0 van 3 gedaan');
+  assert.strictEqual(r.eis2.text, '0 van 3 onderwerpen gehaald');
+  assert.strictEqual(r.eis3.text, 'Geen open fouten');
+  const old = readyOf({ version: 3, mistakes: mis(['gedrag-0'], T(2026, 9, 1)) }, bank);
+  assert.strictEqual(old.headline, 'Nog geen gegevens');
+  assert.strictEqual(readyOf({ version: 3, exams: [exam(30)] }, bank).noData, false, 'één proefexamen is genoeg voor gegevens');
+});
+test('AC-31/Decided: proefexamen met tijd om telt voor eis 1, open vragen als fout', () => {
+  const raw = readyRaw();
+  raw.exams[2] = exam(46, T(2026, 9, 29), 50, { timeUp: true });
+  assert.ok(readyOf(raw, RBANK).eis1.met);
+  raw.exams[2] = exam(20, T(2026, 9, 29), 50, { timeUp: true });
+  assert.strictEqual(readyOf(raw, RBANK).eis1.text, 'Laatste 3: 46, 47, 20 (laagste 20)');
+});
+test('AC-31 (besluit 5): examens met total ≠ 50 tellen niet voor eis 1', () => {
+  const raw = readyRaw();
+  raw.exams = [exam(48, T(2026, 9, 1)), exam(47, T(2026, 9, 5)), exam(30, T(2026, 9, 10), 40), exam(49, T(2026, 9, 20))];
+  const r = readyOf(raw, RBANK);
+  assert.strictEqual(r.eis1.text, 'Laatste 3: 48, 47, 49');
+  assert.ok(r.eis1.met);
+  raw.exams = [exam(48, T(2026, 9, 1)), exam(47, T(2026, 9, 5)), exam(40, T(2026, 9, 10), 40)];
+  assert.strictEqual(readyOf(raw, RBANK).eis1.text, '2 van 3 gedaan, laagste 47');
+});
+test('AC-31: oud examenformaat (kennis/inzicht) telt niet voor eis 1', () => {
+  const raw = readyRaw();
+  raw.exams = [{ date: T(2026, 9, 1), kennis: 12, inzicht: 27, passed: true }].concat(raw.exams.slice(1));
+  assert.strictEqual(readyOf(raw, RBANK).eis1.text, '2 van 3 gedaan, laagste 47');
+});
+test('AC-32: "x van y vragen minstens 1× gezien" telt seen, kaarten en fouten, alleen uit de bank', () => {
+  const bank = mk('snelheid', 5);
+  const r = readyOf({ version: 3, seen: { 'snelheid-0': '2026-09-29', weg: '2026-09-29' }, srs: cards(['snelheid-1'], SEP30), mistakes: mis(['snelheid-2', 'weg-2'], T(2026, 9, 1)) }, bank);
+  assert.strictEqual(r.seen, 3);
+  assert.strictEqual(r.total, 5);
+});
+test('AC-33: proefexamen kiest eerst nooit gezien, dan zonder bekende dag, dan oudste seen; gelijk blijft in volgorde', () => {
+  const { U, st } = setup({ version: 3, seen: { a: '2026-09-29', c: '2026-09-20', e: '2026-09-20' }, srs: cards(['d'], SEP30) });
+  const list = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id }));
+  same(U.freshFirst(st, list).map((x) => x.id), ['b', 'f', 'd', 'c', 'e', 'a']);
+});
+test('AC-33: wasSeen kijkt naar seen, kaarten en fouten (ook van vóór deel 1)', () => {
+  const { U, st } = setup({ version: 3, seen: { a: '2026-09-29' }, srs: cards(['b'], SEP30), mistakes: mis(['c'], SEP30) });
+  same(['a', 'b', 'c', 'd', 'toString'].map((id) => U.wasSeen(st, id)), [true, true, true, false, false]);
+});
+test('Oefen <onderwerp> (besluit 3): open fouten (AC-21), dan nooit gezien, dan oudste seen; max 15; alleen dat onderwerp', () => {
+  const bank = mk('snelheid', 20).concat(mk('gedrag', 5));
+  const seen = {};
+  bank.slice(0, 20).forEach((x, i) => { if (i >= 5) seen[x.id] = '2026-09-' + String(10 + i).padStart(2, '0'); });
+  seen['snelheid-19'] = '2026-09-01';
+  const raw = { version: 3, seen, mistakes: {
+    'snelheid-3': { count: 1, last: T(2026, 9, 25) },
+    'snelheid-4': { count: 1, last: T(2026, 9, 20) },
+    'snelheid-1': { count: 1, streak: 2, resolved: true, last: T(2026, 9, 1) },
+    'gedrag-0': { count: 1, last: T(2026, 9, 1) }
+  } };
+  const { U, st } = setup(raw);
+  const ids = U.topicPractice(st, bank, 'snelheid', SEP30, 15);
+  assert.strictEqual(ids.length, 15);
+  same(ids.slice(0, 2), ['snelheid-4', 'snelheid-3'], 'open fouten eerst, oudste eerst');
+  same(ids.slice(2, 4), ['snelheid-0', 'snelheid-2'], 'dan nooit gezien (opgeloste fout telt als gezien)');
+  assert.strictEqual(ids[4], 'snelheid-1', 'gezien zonder dag');
+  assert.strictEqual(ids[5], 'snelheid-19', 'oudste seen-dag');
+  assert.ok(ids.every((id) => /^snelheid/.test(id)));
+  assert.strictEqual(new Set(ids).size, 15, 'geen dubbele');
+});
+test('AC-34: onderwerp zonder vragen in de bank telt niet mee in de examencheck (history, fouten)', () => {
+  const raw = readyRaw();
+  raw.history.weg = hist('weg', 20, 0);
+  raw.mistakes = mis(['weg-1'], T(2026, 9, 1));
+  raw.exams[0].topics = { weg: [0, 5], snelheid: [41, 45] };
+  const r = readyOf(raw, RBANK);
+  same(r.eis2.rows.map((x) => x.topic).sort(), ['snelheid', 'voorrang']);
+  assert.strictEqual(r.eis3.open, 0);
+  assert.strictEqual(r.headline, 'Klaar volgens deze app');
+  assert.strictEqual(readyOf({ version: 3, history: { weg: hist('weg', 5, 5) } }, RBANK).headline, 'Nog geen gegevens');
+});
+test('AC-34: fouten en kaarten van verwijderde vragen komen niet in het plan', () => {
+  const p = planOf({ version: 3, mistakes: mis(['weg-1'], T(2026, 9, 1)), srs: cards(['weg-2'], T(2026, 9, 1)) }, mk('snelheid', 3));
+  assert.deepStrictEqual([p.mistakes.length, p.due.length, p.fresh.length], [0, 0, 3]);
+  assert.strictEqual(p.weak, null);
+});
+
+// --- AC-35: kapotte opslag voor deel 3 ---
+test('AC-35: clean: geldig `today` blijft, extra velden vervallen', () => {
+  const st = setup({ version: 3, today: { day: '2026-09-30', target: 30, mock: true, practised: 12, x: '<img>' } }).st;
+  same(st.today, { day: '2026-09-30', target: 30, mock: true, practised: 12 });
+  same(setup({ version: 3, today: { day: '2026-09-30', target: 0, mock: false, practised: 0 } }).st.today, { day: '2026-09-30', target: 0, mock: false, practised: 0 });
+});
+test('AC-35: clean: kapot `today` wordt null (onmogelijke dag, verkeerde typen, negatief, kommagetal, Infinity)', () => {
+  const good = { day: '2026-09-30', target: 30, mock: true, practised: 12 };
+  const bad = [null, 'x', 5, [], [good],
+    Object.assign({}, good, { day: '2026-02-31' }), Object.assign({}, good, { day: '2026-9-30' }), Object.assign({}, good, { day: 20260930 }),
+    Object.assign({}, good, { target: '30' }), Object.assign({}, good, { target: -1 }), Object.assign({}, good, { target: 1.5 }), Object.assign({}, good, { target: null }),
+    Object.assign({}, good, { practised: '12' }), Object.assign({}, good, { practised: -3 }), Object.assign({}, good, { practised: undefined }),
+    Object.assign({}, good, { mock: 'true' }), Object.assign({}, good, { mock: 1 })];
+  for (const today of bad) assert.strictEqual(setup({ version: 3, today }).st.today, null, JSON.stringify(today));
+  const raw = '{"version":3,"today":{"day":"2026-09-30","target":1e999,"mock":true,"practised":NaN}}';
+  assert.strictEqual(setup(raw).st.version, 3, 'NaN is geen JSON: hele opslag wordt leeg, geen crash');
+  assert.strictEqual(setup('{"version":3,"today":{"day":"2026-09-30","target":1e999,"mock":true,"practised":0}}').st.today, null);
+});
+test('AC-35: clean: `today` met __proto__/constructor-sleutels vervuilt niets', () => {
+  const raw = '{"version":3,"today":{"__proto__":{"day":"2026-09-30","target":5,"mock":true,"practised":1}},"seen":{"__proto__":"2026-09-30","constructor":"2026-09-30","ok":"2026-09-30"}}';
+  const { st, U } = setup(raw);
+  assert.strictEqual(st.today, null);
+  same(st.seen, { ok: '2026-09-30' });
+  assert.strictEqual(({}).day, undefined);
+  assert.strictEqual(U.wasSeen(st, '__proto__'), false);
+  assert.strictEqual(U.wasSeen(st, 'constructor'), false);
+});
+test('AC-35: kapot `today` van gisteren of later: today() is null en setToday begint "gedaan" op 0', () => {
+  const { S } = setup({ version: 3, today: { day: '2099-01-01', target: 5, mock: false, practised: 99 } });
+  assert.strictEqual(S.today(), null);
+  assert.strictEqual(S.setToday(7, false).practised, 0);
+});
+test('AC-35: plan en examencheck over allerlei rommel: geen fout, geen NaN/undefined in de teksten', () => {
+  const raw = {
+    version: 2, examDate: '2026-02-31', examMonth: '2026-13', today: 'x',
+    history: { snelheid: [{ id: 's', ok: 'ja', day: '2026-09-30' }, null, { id: 'snelheid-0', ok: true, day: '2026-09-29' }], voorrang: 'x', constructor: [] },
+    seen: { 'snelheid-1': 'gisteren', 'snelheid-2': '2026-09-28' },
+    exams: [{ date: 'x', score: 48, total: 50 }, { date: 1, score: 60, total: 50 }, { date: T(2026, 9, 28), score: 47, total: 50, topics: 5 }, null],
+    mistakes: { 'snelheid-0': { count: 1, last: 'x', streak: '1', okDay: '2099-99-99' }, 'snelheid-3': { count: 'x' }, constructor: { count: 1 } },
+    srs: { 'snelheid-4': { box: 1, due: 'x' }, 'snelheid-5': { box: 2, due: T(2026, 9, 1) } }
+  };
+  const { U, st } = setup(raw);
+  const bank = mk('snelheid', 8).concat(mk('voorrang', 2, 'voorrang'));
+  const p = U.dayPlan(st, bank, SEP30);
+  const r = U.readiness(st, bank, SEP30, (t) => NAMES3[t]);
+  const s = U.todayStatus({ target: p.target, practised: 0, mock: p.mock, mockDone: false, available: p.target, welcome: p.welcome });
+  const texts = [s.line, r.headline, r.eis1.text, r.eis2.text, r.eis3.text].concat(r.eis2.rows.map((x) => x.text), U.planNotes(p.rules));
+  for (const t of texts) assert.ok(typeof t === 'string' && t && !/NaN|undefined|null|Infinity/.test(t), JSON.stringify(t));
+  assert.strictEqual(p.rules.mode, 'geen');
+  same(p.mistakes, ['snelheid-0']);
+  same(p.due, ['snelheid-5']);
+  assert.strictEqual(r.eis1.text, '1 van 3 gedaan, laagste 47');
+  assert.strictEqual(r.eis3.text, '1 fout van vóór 28 september', 'fout zonder geldige last telt als oud');
+});
+test('AC-35: eerste gebruik (lege opslag): nulmeting, "niet gepland", "Nog geen gegevens"', () => {
+  const { U, st, S } = setup(undefined);
+  assert.strictEqual(st.today, null);
+  assert.strictEqual(S.today(), null);
+  const bank = mk('snelheid', 20);
+  const p = U.dayPlan(st, bank, SEP30);
+  assert.deepStrictEqual([p.rules.mode, p.fresh.length, p.mock, p.nulmeting, p.target, p.welcome], ['geen', 10, true, true, 5, false]);
+  assert.strictEqual(U.todayStatus({ target: p.target, practised: 0, mock: true, mockDone: false, available: 5 }).line, 'Vandaag: 5 vragen (± 5 min) + ' + MOCK);
+  assert.strictEqual(U.readiness(st, bank, SEP30).headline, 'Nog geen gegevens');
+});
+test('AC-35: versie 2 zonder today/history/seen krijgt today null en blijft verder intact', () => {
+  const { st } = setup({ version: 2, mistakes: { a: { count: 2, last: T(2026, 9, 1) } }, exams: [exam(45)] });
+  assert.strictEqual(st.version, 3);
+  assert.strictEqual(st.today, null);
+  assert.ok(st.mistakes.a);
+  assert.strictEqual(st.exams.length, 1);
+});
+test('dayDiff: kalenderdagen, ook over maand, jaar en de wisseling van zomer- naar wintertijd', () => {
+  const { dayDiff } = load().RB.util;
+  same([dayDiff('2026-09-27', '2026-10-01'), dayDiff('2026-12-31', '2027-01-01'), dayDiff('2026-10-24', '2026-10-26'),
+    dayDiff('2027-03-27', '2027-03-29'), dayDiff('2026-10-01', '2026-09-27')], [4, 1, 2, 2, -4]);
+});
+
 // Contrast (WCAG): --good moet 4,5:1 halen op wit, op --good-bg en als achtergrond voor witte knoptekst.
 function cssTokens(dark) {
   const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'style.css'), 'utf8');
@@ -1012,6 +1843,47 @@ test('contrast: donker --good haalt 4,5:1 op --card, op --good-bg en met --on-st
 if (process.env.TZ === 'Europe/Amsterdam') {
   test('DST: tijdzone Europe/Amsterdam is echt actief', () => {
     assert.notStrictEqual(new Date(2026, 9, 24, 12).getTimezoneOffset(), new Date(2026, 9, 26, 12).getTimezoneOffset());
+  });
+  test('DST AC-27/28: op de 25-uursdag telt 00:30 en 23:30 als één doel-dag; 26 okt 00:10 is een nieuwe dag', () => {
+    const { RB, clock } = load(undefined, at(2026, 10, 25, 0, 30));
+    const s = RB.store;
+    s.setToday(10, false);
+    s.recordAnswer({ id: 'a', topic: 'snelheid' }, true);
+    clock.now = at(2026, 10, 25, 23, 30);
+    s.recordAnswer({ id: 'b', topic: 'snelheid' }, true);
+    assert.strictEqual(s.today().practised, 2);
+    assert.strictEqual(s.today().target, 10);
+    clock.now = at(2026, 10, 26, 0, 10);
+    assert.strictEqual(s.today(), null);
+  });
+  test('DST AC-25: datum 26 okt: 24 okt 23:30 is D = 2, 25 okt 23:30 is D = 1 (alleen fouten)', () => {
+    const U = load().RB.util;
+    assert.strictEqual(U.planRules(U.examInfo('2026-10-26', null, at(2026, 10, 24, 23, 30)), 10).D, 2);
+    const r = U.planRules(U.examInfo('2026-10-26', null, at(2026, 10, 25, 23, 30)), 10);
+    assert.deepStrictEqual([r.D, r.perDay, r.mockEvery, r.mistakes], [1, 0, 0, 20]);
+  });
+  test('DST AC-23: cadans 4 over de wisseling: examen 23 okt 23:30, niet op 26 okt, wel op 27 okt 00:05', () => {
+    const { RB } = load();
+    const st = RB.store._clean({ version: 3, examDate: '2026-11-20', exams: [{ date: at(2026, 10, 23, 23, 30), score: 40, total: 50 }] });
+    const bank = [{ id: 'x', topic: 't', kind: 'mc' }];
+    assert.strictEqual(RB.util.dayPlan(st, bank, at(2026, 10, 26, 23, 59)).mock, false);
+    assert.strictEqual(RB.util.dayPlan(st, bank, at(2026, 10, 27, 0, 5)).mock, true);
+  });
+  test('DST AC-29: eis-3-grens op 26 okt 00:30 is 24 oktober; fout van 23 okt 23:59 is oud, 24 okt 00:00 niet', () => {
+    const { RB } = load();
+    const now = at(2026, 10, 26, 0, 30);
+    const bank = [{ id: 'oud', topic: 't' }, { id: 'nieuw', topic: 't' }];
+    const st = RB.store._clean({ version: 3, mistakes: { oud: { count: 1, last: at(2026, 10, 23, 23, 59) }, nieuw: { count: 1, last: at(2026, 10, 24, 0, 0) } } });
+    const r = RB.util.readiness(st, bank, now);
+    assert.strictEqual(r.eis3.cutoff, '2026-10-24');
+    assert.strictEqual(r.eis3.text, '1 fout van vóór 24 oktober');
+  });
+  test('DST AC-22: welkom terug over de wisseling: laatste 24 okt, op 26 okt 00:30 wel; laatste 25 okt niet', () => {
+    const { RB } = load();
+    const bank = [{ id: 'x', topic: 't', kind: 'mc' }];
+    const w = (day) => RB.util.dayPlan(RB.store._clean({ version: 3, seen: { x: day } }), bank, at(2026, 10, 26, 0, 30)).welcome;
+    assert.strictEqual(w('2026-10-24'), true);
+    assert.strictEqual(w('2026-10-25'), false);
   });
   test('DST: daysUntil over zondag 25 oktober 2026 (25-uursdag)', () => {
     const { daysUntil } = load().RB.util;

@@ -248,6 +248,7 @@ async function run(base) {
   await part1(browser, base);
   await part2(browser, base);
   await part2Edge(browser, base);
+  await part3(browser, base);
 
   await page.goto(base);
   check('service worker is active', await page.evaluate(async () => !!(await navigator.serviceWorker.ready).active));
@@ -973,6 +974,161 @@ async function part2Edge(browser, base) {
     check('AC-35: practice with broken mistakes starts', (await p.textContent('.teller')).trim() === '1 / 2');
     check('AC-13..16/35: no page errors', errs.length === 0, errs.join(' | '));
     await ctx.close();
+  }
+}
+
+// ---------- Exam-ready loop, part 3: start page target line and readiness (AC-17 … AC-35) ----------
+async function part3(browser, base) {
+  const NOW = new Date(2026, 8, 30, 12);
+  const MOCK = 'proefexamen (30 min, zorg dat je niet gestoord wordt)';
+  const ctx = await browser.newContext({ viewport: { width: 320, height: 740 } });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message));
+  p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+  await p.clock.setFixedTime(NOW);
+  await p.goto(base + '#/start');
+  const today = p.getByRole('region', { name: 'Vandaag' });
+  const ready = p.getByRole('region', { name: 'Klaar voor het examen?' });
+  const noScroll = async () => (await p.evaluate(() => document.documentElement.scrollWidth)) <= 320;
+  // Visible text only: the closed <details> repeats the topic rows.
+  const has = async (loc, text) => (await loc.getByText(text, { exact: true }).filter({ visible: true }).count()) >= 1;
+
+  // --- First use: nulmeting, "niet gepland", "Nog geen gegevens" ---
+  check('AC-24/35: first use target line', await has(today, 'Vandaag: 5 vragen (± 5 min) + ' + MOCK), await today.textContent());
+  check('AC-24: start button names the number of questions', await today.getByRole('button', { name: 'Start (5 vragen)' }).isVisible());
+  const mock = today.getByRole('link', { name: 'Proefexamen (nulmeting)' });
+  check('AC-23: nulmeting button links to #/examen', (await mock.getAttribute('href')) === '#/examen');
+  check('AC-23: nulmeting explanation', await has(today, 'Een eerste proefexamen laat zien waar je nu staat.'));
+  check('first use: "niet gepland" mode line', await has(today, 'Nog geen examendatum: 10 nieuwe vragen per dag.'));
+  check('AC-31: first use readiness says "Nog geen gegevens"', await has(ready, 'Nog geen gegevens'));
+  const eisen = await ready.getByRole('heading', { level: 3 }).allTextContents();
+  check('AC-29: three eisen with a status word', eisen.length === 3 && /^Proefexamens\s+Nog niet$/.test(eisen[0]) && /^Onderwerpen\s+Nog niet$/.test(eisen[1]) && /^Oude fouten\s+Gehaald$/.test(eisen[2]), eisen.join('|'));
+  check('AC-29: eisen are an ordered list of 3', (await ready.locator('ol > li').count()) === 3);
+  for (const t of ['Minstens 3 proefexamens, de laatste 3 allemaal 46 of meer goed', 'Elk onderwerp 90% of meer goed over de laatste 20 antwoorden',
+    'Geen open fouten ouder dan 2 dagen', '0 van 3 gedaan', '0 van 13 onderwerpen gehaald', 'Geen open fouten']) {
+    check('AC-29/35: first use shows "' + t + '"', await has(ready, t));
+  }
+  const honesty = ['Gevaarherkenning en vragen met foto\'s meet deze app niet. Oefen die met je theorieboek en de filmpjes die erbij horen.',
+    'Je kent veel van deze vragen al; het echte examen heeft andere vragen.'];
+  for (const t of honesty) check('AC-32: honesty line "' + t.slice(0, 30) + '…"', await has(ready, t));
+  check('AC-32: "0 van 243 vragen minstens 1× gezien"', await has(ready, '0 van 243 vragen minstens 1× gezien'));
+  check('AC-31: no per-eis buttons without data', (await ready.getByRole('button', { name: /^Oefen/ }).count()) === 0 && (await ready.getByRole('link', { name: 'Doe een proefexamen' }).count()) === 0);
+  check('AC-30: topics without answers say "nog geen antwoorden"', (await ready.getByText('nog geen antwoorden', { exact: true }).filter({ visible: true }).count()) === 3);
+  check('part 3: 320px first use: no horizontal scroll', await noScroll());
+  await p.screenshot({ path: path.join(SHOTS, 'part3-first-use-320.png'), fullPage: true });
+  await ready.getByRole('button', { name: 'Naar Vandaag' }).click();
+  check('AC-31: "Naar Vandaag" focuses the Vandaag heading', await p.evaluate(() => document.activeElement.tagName === 'H2' && document.activeElement.textContent === 'Vandaag'));
+
+  // --- AC-28: a new exam date recalculates the target at once; focus stays in the field ---
+  await p.getByLabel('Examendatum').selectOption('datum');
+  await p.getByLabel('Dag van je examen').fill('2026-11-04'); // D = 35, U = 243 → 12 new, mock due → 6
+  check('AC-28: date change recalculates the target line', await has(today, 'Vandaag: 6 vragen (± 5 min) + ' + MOCK), await today.textContent());
+  check('AC-28: date change saves the new target', ((await readState(p)).today || {}).target === 6, JSON.stringify((await readState(p)).today));
+  check('AC-28: focus stays in the date field', await p.getByLabel('Dag van je examen').evaluate((el) => el === document.activeElement));
+  check('AC-19/28: no mode line with a date far enough away', !(await today.textContent()).includes('Nog geen examendatum'));
+  await mock.click();
+  await p.getByRole('button', { name: 'Start proefexamen' }).waitFor();
+  check('AC-23: mock button opens the exam page', p.url().endsWith('#/examen'));
+
+  // --- Data: two mocks, weak topics, old mistakes, target fixed this morning ---
+  const bank = await p.evaluate(() => ({ topics: Object.keys(window.RB.topics), signs: window.RB.signs.slice(0, 4).map((s) => 'bord-' + s.id) }));
+  const day = 86400000;
+  const hist = (t, n, ok) => Array.from({ length: n }, (_, i) => ({ id: t + '-h' + i, ok: i < ok, day: '2026-09-29' }));
+  const history = {};
+  bank.topics.forEach((t) => { history[t] = hist(t, 20, 20); });
+  history.snelheid = hist('snelheid', 20, 17);
+  history.verlichting = hist('verlichting', 17, 15);
+  const [s0, s1, s2, s3] = bank.signs;
+  const data = {
+    version: 3, history,
+    exams: [{ date: NOW.getTime() - 10 * day, score: 47, total: 50, passed: true }, { date: NOW.getTime() - 3 * day, score: 45, total: 50, passed: true }],
+    mistakes: { [s0]: { count: 1, last: NOW.getTime() - 10 * day }, [s1]: { count: 1, last: NOW.getTime() - 5 * day }, [s2]: { count: 1 }, [s3]: { count: 1, last: NOW.getTime() - day } },
+    today: { day: '2026-09-30', target: 30, mock: false, practised: 12 }
+  };
+  await p.goto(base + '#/start');
+  await writeState(p, data);
+  await p.reload();
+  check('AC-27/28: stored target and gedaan: "Vandaag: 30 vragen (± 15 min) · 12 gedaan"', await has(today, 'Vandaag: 30 vragen (± 15 min) · 12 gedaan'), await today.textContent());
+  check('AC-27: "Ga verder" after some practice', (await today.getByRole('button', { name: /^Ga verder \(\d+ vragen\)$/ }).count()) === 1);
+  check('AC-31: readiness "Nog niet" with 3 eisen open', (await ready.locator('p').first().textContent()) === 'Nog niet', await ready.locator('p').first().textContent());
+  check('AC-29: eis 1 "2 van 3 gedaan, laagste 45"', await has(ready, '2 van 3 gedaan, laagste 45'));
+  check('AC-29: eis 2 "11 van 13 onderwerpen gehaald"', await has(ready, '11 van 13 onderwerpen gehaald'));
+  check('AC-29: eis 3 "3 fouten van vóór 28 september"', await has(ready, '3 fouten van vóór 28 september'));
+  check('AC-30: topic row "88% (15/17), nog te weinig antwoorden (17/20)"', await has(ready, '88% (15/17), nog te weinig antwoorden (17/20)'));
+  const visibleRows = await ready.locator('ul > li').filter({ visible: true }).locator('strong').allTextContents();
+  check('AC-29: lowest topic first (Snelheid 85% before Verlichting 88%)', visibleRows.join('|') === 'Snelheid|Verlichting', visibleRows.join('|'));
+  check('AC-31: "Doe een proefexamen" links to #/examen', (await ready.getByRole('link', { name: 'Doe een proefexamen' }).getAttribute('href')) === '#/examen');
+  check('AC-31: one visible "Oefen <onderwerp>" per open topic', (await ready.getByRole('button', { name: 'Oefen Snelheid' }).count()) === 1 && (await ready.getByRole('button', { name: 'Oefen Verlichting' }).count()) === 1);
+  check('AC-32: seen line counts mistakes as seen', await has(ready, '4 van 243 vragen minstens 1× gezien'));
+  for (const t of honesty) check('AC-32: honesty line with data "' + t.slice(0, 30) + '…"', await has(ready, t));
+  await ready.getByText('Alle onderwerpen (13)').click();
+  check('AC-29: "Alle onderwerpen (13)" lists 13 topics', (await ready.locator('details[open] .onderwerp-rij').count()) === 13);
+  check('part 3: 320px with all topics open: no horizontal scroll', await noScroll());
+  await p.screenshot({ path: path.join(SHOTS, 'part3-data-320.png'), fullPage: true });
+  await ready.getByRole('button', { name: 'Oefen oude fouten (3)' }).click();
+  check('AC-31: "Oefen oude fouten (3)" starts a session of 3', /Oude fouten/.test(await p.textContent('h1')) && (await p.textContent('.teller')).trim() === '1 / 3', await p.textContent('.teller'));
+  await p.reload(); // the session runs on #/start, so reload to get the start page back
+  await ready.getByRole('button', { name: 'Oefen Snelheid' }).click();
+  check('AC-31: "Oefen Snelheid" starts a Snelheid session (max 15)', /Snelheid/.test(await p.textContent('h1')) && /^1 \/ (1[0-5]|[1-9])$/.test((await p.textContent('.teller')).trim()), await p.textContent('.teller'));
+
+  // --- Target met and "Klaar volgens deze app" ---
+  await p.goto(base + '#/start');
+  bank.topics.forEach((t) => { history[t] = hist(t, 20, 20); });
+  await writeState(p, { version: 3, history, today: { day: '2026-09-30', target: 30, mock: false, practised: 32 },
+    exams: [46, 48, 50].map((score, i) => ({ date: NOW.getTime() - (5 - i) * day, score, total: 50, passed: true })) });
+  await p.reload();
+  check('AC-27: "Doel van vandaag gehaald · 32 gedaan"', await has(today, 'Doel van vandaag gehaald · 32 gedaan'), await today.textContent());
+  check('AC-27: "Nog een ronde" stays available', await today.getByRole('button', { name: 'Nog een ronde' }).isVisible());
+  check('AC-31: all met: "Klaar volgens deze app"', await has(ready, 'Klaar volgens deze app'));
+  for (const t of honesty) check('AC-32: honesty line also when Klaar "' + t.slice(0, 30) + '…"', await has(ready, t));
+
+  // --- AC-35: broken saved data ---
+  for (const raw of ['{"version":3,"today":', JSON.stringify({
+    version: 3, today: { day: '2026-02-31', target: 'x', practised: -1, mock: 'ja' }, examDate: '2026-02-31', examMonth: '2026-13',
+    history: { snelheid: 'x', voorrang: [null, { id: 1 }], constructor: [] }, seen: { constructor: '2026-09-30', a: 'nope' },
+    exams: [{ date: 'x' }, { date: 1, score: 60, total: 50 }, { date: NOW.getTime(), score: 48, total: 50, topics: 5 }],
+    mistakes: { [s0]: { count: 1, last: 'x', streak: '1', okDay: '2099-99-99' }, constructor: { count: 1 }, weg: { count: 1 } }, srs: { a: { box: 1, due: 'x' } }
+  })]) {
+    await writeState(p, raw);
+    await p.reload();
+    const text = (await today.textContent()) + (await ready.textContent());
+    check('AC-35: broken data (' + raw.slice(0, 22) + '…): start renders both cards', (await today.isVisible()) && (await ready.isVisible()) && /Vandaag:|Doel van vandaag/.test(text), text.slice(0, 200));
+    check('AC-35: broken data (' + raw.slice(0, 22) + '…): no NaN/undefined', !/NaN|undefined|Infinity/.test(text), text);
+  }
+  check('AC-35: broken data: 320px no horizontal scroll', await noScroll());
+
+  // --- AC-27: an answer in another session before the start page was opened today still counts ---
+  await writeState(p, { version: 3, today: { day: '2026-09-29', target: 10, mock: false, practised: 10 } });
+  await p.goto(base + '#/borden'); await p.reload();
+  await p.getByRole('button', { name: 'Bord → betekenis' }).click();
+  await answerPractice(p);
+  await p.goto(base + '#/start');
+  check('AC-27: a Borden answer before opening the start page counts as "1 gedaan"', /· 1 gedaan$/.test((await today.locator('p').first().textContent()).trim()), await today.locator('p').first().textContent());
+  check('part 3: no page errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+
+  // --- BUG (see report): after a mock exam, the Vandaag round serves the exam mistakes, which never count as "gedaan" ---
+  {
+    const c2 = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    await c2.addInitScript(installOracle);
+    const q = await c2.newPage();
+    const e2 = [];
+    q.on('pageerror', (e) => e2.push(e.message));
+    q.on('dialog', (d) => d.accept());
+    await q.clock.setFixedTime(NOW);
+    await q.goto(base + '#/start');
+    const t2 = q.getByRole('region', { name: 'Vandaag' });
+    await t2.getByRole('link', { name: 'Proefexamen (nulmeting)' }).click();
+    await runMock(q, (info, k) => k < 20); // nulmeting first, 20 wrong
+    await q.goto(base + '#/start');
+    await t2.getByRole('button', { name: 'Start (5 vragen)' }).click();
+    for (let k = 0; k < 5; k++) { await q.locator('.q').waitFor(); await q.evaluate(() => window.__q.answer(true)); }
+    await q.goto(base + '#/start'); await q.reload();
+    const line = (await t2.locator('p').first().textContent()).trim();
+    check('[BUG] AC-27: after the nulmeting, a full "Start (5 vragen)" round counts as 5 gedaan', /· 5 gedaan$/.test(line), line);
+    check('part 3 mock-first: no page errors', e2.length === 0, e2.join(' | '));
+    await c2.close();
   }
 }
 
