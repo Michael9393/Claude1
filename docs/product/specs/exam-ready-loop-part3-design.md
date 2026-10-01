@@ -269,3 +269,12 @@ New (plain CSS, mobile-first):
 4. **44 vs 46 sentence** under eis 1 (Part 2 open point 9). *Default:* add `Je hebt er 44 nodig om te slagen; 46 geeft wat marge.`
 5. **Old exams with `total` other than 50** for eis 1. *Default:* count only exams with `total` 50; the others are skipped silently.
 6. **Duplicate honesty text.** The page-bottom `.noot` also mentions gevaarherkenning. *Default:* keep both for now (different context); trim in a later content pass.
+
+### Decided (1 October 2026)
+
+1. **User:** literal spec. Any single unmet eis gives "Bijna: …", also when eis 2 has many topics open (e.g. "Bijna: nog 13 onderwerpen").
+2. **User:** default. "Welkom terug." when the last activity was before yesterday and nothing is done today.
+3. **User:** default. Max 15: open mistakes of that topic, then never seen, then oldest `seen`.
+4. **User:** default. Show "Je hebt er 44 nodig om te slagen; 46 geeft wat marge." under eis 1.
+5. **PM:** default. Only exams with `total` 50 count for eis 1.
+6. **PM:** default. Keep both texts for now.
