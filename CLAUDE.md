@@ -21,7 +21,7 @@ Theorie B: a Dutch study app for the CBR theory exam B (car). The UI text is in 
 - `js/intersection.js`: SVG right-of-way crossings.
 - `js/data/`: `questions.js` (every question has a `source`), `signs.js`, `voorrang.js`.
 - `css/style.css`: design tokens as custom properties on `:root`, with a dark-mode override.
-- `docs/product/`: vision, backlog and specs. `docs/product-review/`: review rounds.
+- `docs/product/`: vision, backlog and specs. `docs/product-review/`: review rounds. `docs/HANDOVER.md`: state of the work for a new session.
 
 ## Commands
 
