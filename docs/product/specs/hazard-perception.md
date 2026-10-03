@@ -1,6 +1,6 @@
 # Spec: Hazard perception (gevaarherkenning) with still scenes
 
-- **Status:** draft (3 October 2026)
+- **Status:** dropped (3 October 2026). The owner chose Q1 = C: the three-button format is no longer on the exam, and #8, #10 and #11 add more in the time left. Kept for reference.
 - **Priority:** Must
 - **Related:** backlog #7. Touches [exam-ready-loop](exam-ready-loop.md) (AC-6 and AC-32 honesty notes, readiness, plan). Overlaps #22 (untimed mode, out) and #21 (photo questions, out). Content rules: `docs/verificatie.md`.
 
